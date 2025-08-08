@@ -1,0 +1,35 @@
+services:
+  carla-server:
+    # Use a specific CARLA version for consistency.
+    # You can find other versions on Docker Hub: https://hub.docker.com/r/carlasim/carla/tags
+    image: carlasim/carla:0.9.15
+    container_name: carla-server
+    
+    # Expose the default CARLA ports for client connections.
+    # Port 2000: RPC for control
+    # Port 2001: Streaming (primary sensor view)
+    # Port 2002: Streaming (secondary sensor view)
+    ports:
+      - "2000-2002:2000-2002"
+      
+    # Environment variables required for GPU access and display forwarding.
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - DISPLAY=${DISPLAY}
+      - XDG_RUNTIME_DIR=${XDG_RUNTIME_DIR}
+      
+    # CARLA requires GPU for rendering. This section ensures the container has access.
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+              
+    # The command to launch the CARLA server inside the container.
+    # -quality-level=Epic: Sets rendering quality (other options: Low, Medium, High).
+    # -RenderOffScreen: Use this flag to run CARLA in headless mode (no window).
+
+    command: ./CarlaUE4.sh -RenderOffScreen 
+
