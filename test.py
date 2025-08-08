@@ -21,20 +21,22 @@ import struct
 import cv2
 import numpy as np
 
+carla_dir = '/home/cc/c_sim/' # Adjust this path to your CARLA directory
+
 try:
-    # This path needs to be correct for your setup
-    sys.path.append(glob.glob('/home/cc/c_sim/PythonAPI/carla/dist/carla-*%d.%d-%s.egg' % (
+    sys.path.append(glob.glob(carla_dir + 'PythonAPI/carla/dist/carla-*%d.%d-%s.egg' % (
         sys.version_info.major,
         sys.version_info.minor,
         'win-amd64' if os.name == 'nt' else 'linux-x86_64'))[0])
+    sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 except IndexError:
-    print("Error: CARLA egg file not found. Please verify the path in the script.")
+    print("Error: CARLA egg file not found.")
     sys.exit()
 
 import carla
-# This path needs to be correct for your setup
-sys.path.append('/home/cc/c_sim/PythonAPI/carla/')
+sys.path.append(carla_dir + 'PythonAPI/carla/')
 from agents.navigation.global_route_planner import GlobalRoutePlanner
+
 
 # --- Shared State for Threads ---
 shared_state = {
