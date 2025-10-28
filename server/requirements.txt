@@ -1,0 +1,41 @@
+# requirements.txt
+# =====================================================
+# Core Python dependencies for CARLA AI-in-the-Loop project
+# =====================================================
+
+# --- Core Simulation + Control ---
+carla==0.9.15              # Adjust if your CARLA version differs
+numpy>=1.23.0
+opencv-python>=4.8.0
+pygame>=2.5.0
+
+# --- Server API + WebSocket + Data Models ---
+fastapi>=0.115.0
+uvicorn[standard]>=0.30.0
+pydantic>=2.5.0
+python-multipart>=0.0.9
+websockets>=12.0
+
+# --- Async + Networking ---
+aiofiles>=23.2.1
+requests>=2.31.0
+
+# --- Visualization + Debug (optional) ---
+matplotlib>=3.7.2
+
+# --- Logging + File Utilities ---
+loguru>=0.7.0
+
+# --- Data Export / Logging ---
+pandas>=2.2.2
+
+# --- LLM Integration (client optional, local or API) ---
+openai>=1.44.0
+tiktoken>=0.7.0
+
+# =====================================================
+# Development / Testing
+# =====================================================
+pytest>=8.0.0
+black>=24.3.0
+isort>=5.12.0
