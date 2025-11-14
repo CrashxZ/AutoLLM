@@ -1,7 +1,11 @@
 // client/web/src/components/IntentGeneratorPanel.jsx
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 
 const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:8000";
+const SPEED_TOLERANCE_KMH = 2.5;
+const STEP_RESEND_INTERVAL_MS = 3000;
+const STEP_MAX_RUNTIME_MS = 25000;
+const STEP_MAX_RETRIES = 4;
 
 /**
  * IntentGeneratorPanel
@@ -23,79 +27,447 @@ export default function IntentGeneratorPanel({
   telemetry = {},
   goal = "",
   periodSec = 10,
+  mainVehicleId = null,
+  sendIntent = null,
 }) {
   const [apiKey, setApiKey] = useState(localStorage.getItem("openai_api_key") || "");
   const [enabled, setEnabled] = useState({}); // { [vehId]: boolean }
-  const [rows, setRows] = useState({});       // { [vehId]: { topB64, ctx, intent, ts, error } }
+  const [rows, setRows] = useState({}); // { [vehId]: { topB64, ctx, intent, ts, error, goal, latencyMs, latencyHistory } }
+  const [goalOverrides, setGoalOverrides] = useState({}); // { [vehId]: string }
   const [busy, setBusy] = useState(false);
+  const [copiedVeh, setCopiedVeh] = useState(null);
   const timerRef = useRef(null);
+  const busyRef = useRef(false);
+  const latestRef = useRef(null);
+  const stepTrackersRef = useRef({});
+  const DEFAULT_GOAL = "Drive safely and keep lane discipline.";
+  const hasApiKey = apiKey.trim().length > 0;
+  const runDisabled = !hasApiKey || busy;
+  const sendIntentFn = typeof sendIntent === "function" ? sendIntent : null;
+  const mainEnabled = mainVehicleId != null ? !!enabled[mainVehicleId] : false;
 
   useEffect(() => {
-    if (apiKey) localStorage.setItem("openai_api_key", apiKey);
+    const trimmed = apiKey.trim();
+    if (trimmed) localStorage.setItem("openai_api_key", trimmed);
+    else localStorage.removeItem("openai_api_key");
   }, [apiKey]);
+
+  useEffect(() => {
+    latestRef.current = {
+      vehicles,
+      telemetry,
+      goal,
+      goalOverrides,
+      enabled,
+      apiKey: apiKey.trim(),
+      hasApiKey,
+      mainVehicleId,
+      sendIntentFn,
+      rows,
+    };
+  }, [
+    vehicles,
+    telemetry,
+    goal,
+    goalOverrides,
+    enabled,
+    apiKey,
+    hasApiKey,
+    mainVehicleId,
+    sendIntentFn,
+    rows,
+  ]);
+
+  useEffect(() => {
+    if (copiedVeh == null) return undefined;
+    const t = setTimeout(() => setCopiedVeh(null), 1500);
+    return () => clearTimeout(t);
+  }, [copiedVeh]);
+
+  useEffect(() => {
+    if (mainVehicleId == null) return;
+    setEnabled((prev) => {
+      if (prev[mainVehicleId]) return prev;
+      return { ...prev, [mainVehicleId]: true };
+    });
+  }, [mainVehicleId]);
+
+  useEffect(() => {
+    const allowed = new Set(vehicles.map(String));
+    setEnabled((prev) => {
+      let changed = false;
+      const next = {};
+      Object.entries(prev).forEach(([key, value]) => {
+        if (allowed.has(key)) {
+          next[key] = value;
+        } else {
+          changed = true;
+        }
+      });
+      if (!changed && Object.keys(next).length === Object.keys(prev).length) return prev;
+      return next;
+    });
+  }, [vehicles]);
+
+  useEffect(() => {
+    const allowed = new Set(vehicles.map(String));
+    setRows((prev) => {
+      let changed = false;
+      const next = {};
+      Object.entries(prev).forEach(([key, value]) => {
+        if (allowed.has(key)) {
+          next[key] = value;
+        } else {
+          changed = true;
+        }
+      });
+      return changed ? next : prev;
+    });
+  }, [vehicles]);
+
+  useEffect(() => {
+    const allowed = new Set(vehicles.map((v) => String(v)));
+    Object.keys(stepTrackersRef.current).forEach((key) => {
+      if (!allowed.has(key)) {
+        delete stepTrackersRef.current[key];
+      }
+    });
+  }, [vehicles]);
+
+  useEffect(() => {
+    Object.entries(enabled).forEach(([key, value]) => {
+      if (!value && stepTrackersRef.current[key]) {
+        delete stepTrackersRef.current[key];
+      }
+    });
+  }, [enabled]);
+
+  useEffect(() => {
+    Object.entries(stepTrackersRef.current).forEach(([key, tracker]) => {
+      const row = rows[key] ?? rows[Number(key)];
+      if (!row?.plan || row.plan.id !== tracker.planId) {
+        delete stepTrackersRef.current[key];
+      }
+    });
+  }, [rows]);
+
+  const runCycle = useCallback(async () => {
+    const state = latestRef.current;
+    if (!state) return;
+    if (busyRef.current || !state.hasApiKey) {
+      if (!state.hasApiKey) {
+        console.warn("IntentGeneratorPanel: set an OpenAI API key before running.");
+      }
+      return;
+    }
+
+    busyRef.current = true;
+    setBusy(true);
+    try {
+      const key = state.apiKey;
+      const {
+        vehicles: vehs,
+        enabled: enabledMap,
+        telemetry: teleMap,
+        goal: panelGoal,
+        rows: currentRows,
+      } = state;
+
+      for (const vid of vehs) {
+        if (!enabledMap?.[vid]) continue;
+        const tele = teleMap?.[String(vid)];
+        if (!tele) continue;
+
+        const override = (state.goalOverrides?.[vid] || "").trim();
+        const goalText = override || panelGoal || DEFAULT_GOAL;
+        const existingRow = currentRows?.[vid];
+        const planActive = isPlanActive(existingRow?.plan, goalText);
+        const startTs = nowMs();
+
+        try {
+          const topB64 = await fetchTopFrameBase64(vid);
+          const ctx = {
+            veh_id: vid,
+            goal: goalText,
+            speed_kmh: Number(tele.speed_kmh ?? 0),
+            lane_id: tele.lane_id ?? null,
+          };
+
+          if (planActive) {
+            setRows((prev) => {
+              const prevRow = prev?.[vid] || {};
+              return {
+                ...prev,
+                [vid]: {
+                  ...prevRow,
+                  topB64,
+                  ctx,
+                  ts: Date.now(),
+                  error: null,
+                  goal: goalText,
+                },
+              };
+            });
+            continue;
+          }
+
+          const intent = await callOpenAIForIntent(key, ctx, topB64);
+          const latencyMs = Math.max(0, nowMs() - startTs);
+          const plan = buildPlanFromIntent(intent, ctx);
+
+          setRows((prev) => {
+            const prevRow = prev?.[vid] || {};
+            const history = Array.isArray(prevRow.latencyHistory)
+              ? [...prevRow.latencyHistory.slice(-19), latencyMs]
+              : [latencyMs];
+            return {
+              ...prev,
+              [vid]: {
+                ...prevRow,
+                topB64,
+                ctx,
+                intent,
+                plan,
+                ts: Date.now(),
+                error: null,
+                goal: goalText,
+                latencyMs,
+                latencyHistory: history,
+              },
+            };
+          });
+
+          console.log(
+            `[IntentGenerator] Vehicle ${vid} plan latency ${latencyMs.toFixed(1)} ms`
+          );
+        } catch (err) {
+          setRows((prev) => {
+            const prevRow = prev?.[vid] || {};
+            return {
+              ...prev,
+              [vid]: {
+                ...prevRow,
+                ts: Date.now(),
+                error: String(err),
+                goal: goalText,
+              },
+            };
+          });
+          console.warn("IntentGeneratorPanel runCycle error:", err);
+        }
+      }
+    } finally {
+      busyRef.current = false;
+      setBusy(false);
+    }
+  }, []);
 
   // Clear interval on unmount
   useEffect(() => {
     return () => {
-      if (timerRef.current) clearInterval(timerRef.current);
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+        timerRef.current = null;
+      }
     };
   }, []);
 
-  // Rebuild interval when toggles/period change
   useEffect(() => {
-    if (timerRef.current) clearInterval(timerRef.current);
-    if (!apiKey) return; // do nothing until key exists
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+    if (!hasApiKey) return;
 
+    const periodMs = Math.max(2, periodSec) * 1000;
+    runCycle();
     timerRef.current = setInterval(() => {
       runCycle();
-    }, Math.max(2, periodSec) * 1000);
+    }, periodMs);
 
     return () => {
-      if (timerRef.current) clearInterval(timerRef.current);
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+        timerRef.current = null;
+      }
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [apiKey, periodSec, enabled, vehicles, telemetry, goal]);
+  }, [hasApiKey, periodSec, runCycle]);
+
+  useEffect(() => {
+    if (!hasApiKey || !mainEnabled) return;
+    runCycle();
+  }, [hasApiKey, mainEnabled, runCycle]);
+
+  const updatePlanStep = useCallback((vehId, stepId, mutation) => {
+    setRows((prev) => {
+      const key = String(vehId);
+      const prevRow = prev[key] ?? prev[vehId];
+      if (!prevRow?.plan || !Array.isArray(prevRow.plan.steps)) return prev;
+      const idx = prevRow.plan.steps.findIndex((s) => s.id === stepId);
+      if (idx < 0) return prev;
+      const currentStep = prevRow.plan.steps[idx];
+      const partial =
+        typeof mutation === "function" ? mutation(currentStep) || {} : mutation || {};
+      const nextStep = { ...currentStep, ...partial };
+      const steps = [...prevRow.plan.steps];
+      steps[idx] = nextStep;
+      const status = derivePlanStatusFromSteps(steps);
+      const nextPlan = {
+        ...prevRow.plan,
+        steps,
+        status,
+        completedAt: status === "complete" ? Date.now() : prevRow.plan.completedAt,
+      };
+      const next = { ...prev };
+      next[key] = { ...prevRow, plan: nextPlan };
+      return next;
+    });
+  }, []);
+
+  const issueStepCommand = useCallback(
+    (vehId, row, step, tele) => {
+      if (!sendIntentFn || !row?.plan) return;
+      const payload = buildIntentPayload(vehId, row.plan, step, row.intent);
+      const message = { cmd: "intent", veh_id: vehId, intent: payload };
+      sendIntentFn(message);
+      const trackerKey = String(vehId);
+      stepTrackersRef.current[trackerKey] = {
+        planId: row.plan.id,
+        stepId: step.id,
+        payload: message,
+        issuedAt: Date.now(),
+        lastSend: Date.now(),
+        retries: 0,
+        targetLaneId: step.targetLaneId ?? null,
+        targetSpeedKmh: step.targetSpeedKmh ?? null,
+        startLaneId: tele?.lane_id ?? null,
+        startSpeedKmh: tele?.speed_kmh ?? null,
+        action: step.action,
+      };
+      updatePlanStep(vehId, step.id, {
+        status: "running",
+        lastIssuedAt: Date.now(),
+        retries: 0,
+      });
+    },
+    [sendIntentFn, updatePlanStep]
+  );
+
+  useEffect(() => {
+    if (!sendIntentFn) return;
+    Object.entries(rows).forEach(([key, row]) => {
+      const vid = Number(key);
+      if (!enabled[vid]) return;
+      const plan = row?.plan;
+      if (!plan || plan.status === "complete" || plan.status === "failed") {
+        return;
+      }
+
+      const pending = plan.steps?.find((step) => step.status === "pending");
+      const tracker = stepTrackersRef.current[key];
+      if (pending) {
+        if (tracker && tracker.stepId === pending.id) return;
+        const tele = telemetry?.[key] || telemetry?.[String(vid)] || null;
+        issueStepCommand(vid, row, pending, tele);
+        return;
+      }
+
+      const running = plan.steps?.find((step) => step.status === "running");
+      if (running && (!tracker || tracker.stepId !== running.id)) {
+        const tele = telemetry?.[key] || telemetry?.[String(vid)] || null;
+        issueStepCommand(vid, row, running, tele);
+      }
+    });
+  }, [rows, enabled, telemetry, issueStepCommand, sendIntentFn]);
+
+  useEffect(() => {
+    if (!sendIntentFn) return;
+    const updates = [];
+    const now = Date.now();
+    Object.entries(stepTrackersRef.current).forEach(([key, tracker]) => {
+      const row = rows[key] ?? rows[Number(key)];
+      if (!row?.plan) {
+        delete stepTrackersRef.current[key];
+        return;
+      }
+      const tele = telemetry?.[key] || telemetry?.[String(key)] || null;
+      if (!tele) return;
+      const step = row.plan.steps?.find((s) => s.id === tracker.stepId);
+      if (!step || step.status !== "running") {
+        delete stepTrackersRef.current[key];
+        return;
+      }
+
+      if (hasStepCompleted(step, tele, tracker)) {
+        updates.push({
+          vid: Number(key),
+          stepId: step.id,
+          patch: { status: "done", completedAt: Date.now() },
+        });
+        delete stepTrackersRef.current[key];
+        return;
+      }
+
+      if (now - tracker.lastSend >= STEP_RESEND_INTERVAL_MS) {
+        if (
+          tracker.retries + 1 > STEP_MAX_RETRIES ||
+          now - tracker.issuedAt >= STEP_MAX_RUNTIME_MS
+        ) {
+          updates.push({
+            vid: Number(key),
+            stepId: step.id,
+            patch: {
+              status: "failed",
+              error: "Timed out waiting for completion.",
+              failedAt: Date.now(),
+            },
+          });
+          delete stepTrackersRef.current[key];
+        } else {
+          tracker.retries += 1;
+          tracker.lastSend = now;
+          sendIntentFn(tracker.payload);
+          updates.push({
+            vid: Number(key),
+            stepId: step.id,
+            patch: { retries: tracker.retries, lastIssuedAt: Date.now() },
+          });
+        }
+      }
+    });
+
+    if (updates.length) {
+      setRows((prev) => {
+        const next = { ...prev };
+        updates.forEach(({ vid, stepId, patch }) => {
+          const key = String(vid);
+          const row = next[key] ?? next[vid];
+          if (!row?.plan) return;
+          const idx = row.plan.steps.findIndex((s) => s.id === stepId);
+          if (idx < 0) return;
+          const steps = [...row.plan.steps];
+          steps[idx] = { ...steps[idx], ...patch };
+          const status = derivePlanStatusFromSteps(steps);
+          next[key] = {
+            ...row,
+            plan: {
+              ...row.plan,
+              steps,
+              status,
+              completedAt: status === "complete" ? Date.now() : row.plan.completedAt,
+            },
+          };
+        });
+        return next;
+      });
+    }
+  }, [rows, telemetry, sendIntentFn]);
 
   const findTele = (vehId) => {
     // server sends string keys
     return telemetry?.[String(vehId)] || null;
   };
 
-  const runCycle = async () => {
-    if (busy) return; // gentle guard
-    setBusy(true);
-    try {
-      // sequential to be gentle on API; can parallelize later
-      for (const vid of vehicles) {
-        if (!enabled[vid]) continue;
-        const tele = findTele(vid);
-        if (!tele) continue;
-
-        try {
-          const topB64 = await fetchTopFrameBase64(vid);
-          const ctx = {
-            veh_id: vid,
-            goal: goal || "Drive safely and keep lane discipline.",
-            speed_kmh: Number(tele.speed_kmh ?? 0),
-            lane_id: tele.lane_id ?? null,
-          };
-          const intent = await callOpenAIForIntent(apiKey, ctx, topB64);
-
-          setRows((prev) => ({
-            ...prev,
-            [vid]: { topB64, ctx, intent, ts: Date.now(), error: null },
-          }));
-        } catch (err) {
-          setRows((prev) => ({
-            ...prev,
-            [vid]: { ...(prev[vid] || {}), error: String(err) },
-          }));
-        }
-      }
-    } finally {
-      setBusy(false);
-    }
-  };
 
   const toggleVeh = (vid) => {
     setEnabled((e) => ({ ...e, [vid]: !e[vid] }));
@@ -107,6 +479,38 @@ export default function IntentGeneratorPanel({
       delete n[vid];
       return n;
     });
+    delete stepTrackersRef.current[String(vid)];
+  };
+
+  const updateGoalOverride = (vid, value) => {
+    setGoalOverrides((prev) => ({ ...prev, [vid]: value }));
+  };
+
+  const clearGoalOverride = (vid) => {
+    setGoalOverrides((prev) => {
+      const next = { ...prev };
+      delete next[vid];
+      return next;
+    });
+  };
+
+  const copyIntent = async (vid) => {
+    const row = rows?.[vid];
+    if (!row?.intent) return;
+    const json = JSON.stringify(row.intent, null, 2);
+    try {
+      const canClipboard =
+        typeof navigator !== "undefined" && navigator.clipboard?.writeText;
+      if (canClipboard) {
+        await navigator.clipboard.writeText(json);
+        setCopiedVeh(vid);
+      } else if (typeof window !== "undefined") {
+        // fallback prompt ensures user can still grab the payload
+        window.prompt("Copy intent JSON:", json);
+      }
+    } catch (err) {
+      console.error("Copy failed:", err);
+    }
   };
 
   return (
@@ -114,7 +518,7 @@ export default function IntentGeneratorPanel({
       {/* Header / Controls */}
       <div className="flex items-center justify-between px-4 py-2 bg-gray-800 border-b border-gray-700">
         <div className="text-sm font-semibold">Vehicular AI (Intent Generator)</div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap justify-end">
           <input
             type="password"
             placeholder="OpenAI API Key"
@@ -127,10 +531,18 @@ export default function IntentGeneratorPanel({
           </span>
           <button
             onClick={runCycle}
-            className="text-xs px-2 py-1 rounded bg-indigo-600 hover:bg-indigo-700"
+            disabled={runDisabled}
+            className={`text-xs px-2 py-1 rounded bg-indigo-600 ${
+              runDisabled ? "opacity-40 cursor-not-allowed" : "hover:bg-indigo-700"
+            }`}
           >
             Run once
           </button>
+          {!hasApiKey && (
+            <span className="text-[11px] text-amber-400">
+              Enter an OpenAI API key to enable polling.
+            </span>
+          )}
         </div>
       </div>
 
@@ -141,7 +553,22 @@ export default function IntentGeneratorPanel({
         )}
         {vehicles.map((vid) => {
           const row = rows[vid];
+          const isMain = vid === mainVehicleId;
           const tele = findTele(vid);
+          const historyCount = Array.isArray(row?.latencyHistory) ? row.latencyHistory.length : 0;
+          const latencyMs = Number.isFinite(row?.latencyMs) ? row.latencyMs : null;
+          const avgLatencyMs =
+            historyCount > 0
+              ? row.latencyHistory.reduce((sum, value) => sum + value, 0) / historyCount
+              : null;
+          const latencyText =
+            latencyMs != null
+              ? `Latency: ${(latencyMs / 1000).toFixed(2)}s${
+                  historyCount > 1 && avgLatencyMs != null
+                    ? ` (avg ${(avgLatencyMs / 1000).toFixed(2)}s)`
+                    : ""
+                }`
+              : null;
           return (
             <div
               key={vid}
@@ -150,6 +577,7 @@ export default function IntentGeneratorPanel({
               <div className="flex items-center justify-between px-3 py-2 bg-gray-800">
                 <div className="text-sm font-semibold">
                   Vehicle {vid}
+                  {isMain && <span className="ml-1 text-[11px] text-emerald-400">(main)</span>}
                   <span className="ml-2 text-xs text-gray-400">
                     {tele
                       ? `| speed ${tele.speed_kmh?.toFixed?.(1) ?? "-"} km/h | lane ${tele.lane_id ?? "-"}`
@@ -194,25 +622,146 @@ export default function IntentGeneratorPanel({
 
                 {/* Intent JSON */}
                 <div className="col-span-3">
-                  <div className="text-xs text-gray-400 mb-1">
-                    Intent (Vehicular Agent)
-                  </div>
-                  <div className="text-xs bg-black/40 rounded p-2 overflow-auto max-h-40">
-                    {row?.intent ? (
-                      <pre className="whitespace-pre-wrap">
-{JSON.stringify(row.intent, null, 2)}
-                      </pre>
-                    ) : (
-                      <span className="text-gray-500">—</span>
+                  <div className="text-xs text-gray-400 mb-1">Goal Override</div>
+                  <div className="flex items-start gap-2 mb-3">
+                    <textarea
+                      value={goalOverrides[vid] ?? ""}
+                      onChange={(e) => updateGoalOverride(vid, e.target.value)}
+                      rows={2}
+                      placeholder={`Default: ${goal || DEFAULT_GOAL}`}
+                      className="w-full bg-gray-800 border border-gray-700 rounded px-2 py-1 text-xs resize-none"
+                    />
+                    {(goalOverrides[vid] ?? "") !== "" && (
+                      <button
+                        onClick={() => clearGoalOverride(vid)}
+                        className="text-[11px] px-2 py-1 rounded bg-gray-700 hover:bg-gray-600"
+                      >
+                        Reset
+                      </button>
                     )}
                   </div>
 
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-2">
+                    <div>
+                      <div className="text-xs text-gray-400 mb-1">Intent</div>
+                      <div className="text-xs bg-black/40 rounded p-2 min-h-[96px]">
+                        {row?.intent ? (
+                          <>
+                            <div className="font-semibold text-indigo-300">
+                              {row.intent.ego_action || "—"}
+                            </div>
+                            <div className="mt-1 text-gray-200">
+                              {row.intent.reason || "No reason provided."}
+                            </div>
+                            <div className="mt-1 text-gray-400">
+                              Confidence:{" "}
+                              {Number.isFinite(row.intent.confidence)
+                                ? row.intent.confidence.toFixed(2)
+                                : "n/a"}
+                            </div>
+                          </>
+                        ) : (
+                          <span className="text-gray-500">—</span>
+                        )}
+                      </div>
+                    </div>
+
+                    <div>
+                      <div className="text-xs text-gray-400 mb-1">Request</div>
+                      <div className="text-xs bg-black/40 rounded p-2 min-h-[96px]">
+                        {row?.intent ? (
+                          <>
+                            <div className="text-gray-200">
+                              Ask: {row.intent?.request?.ask || "none"}
+                            </div>
+                            <div className="mt-1 text-gray-400">
+                              To:{" "}
+                              {Array.isArray(row.intent?.request?.to) &&
+                              row.intent.request.to.length
+                                ? row.intent.request.to.join(", ")
+                                : "none"}
+                            </div>
+                          </>
+                        ) : (
+                          <span className="text-gray-500">—</span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {row?.plan && (
+                    <div className="mt-3">
+                      <div className="text-xs text-gray-400 mb-1">Plan</div>
+                      <div className="text-xs bg-black/40 rounded p-2 space-y-2">
+                        <div className="flex justify-between items-center text-[11px] text-gray-400">
+                          <span className="text-gray-200">{row.plan.summary || "LLM plan"}</span>
+                          <span className={`px-2 py-[1px] rounded ${planStatusClass(row.plan.status)}`}>
+                            {row.plan.status || "pending"}
+                          </span>
+                        </div>
+                        {row.plan.steps?.length ? (
+                          <ol className="list-decimal ml-4 space-y-1">
+                            {row.plan.steps.map((step) => {
+                              const targetText = formatStepTargets(step);
+                              return (
+                                <li key={step.id} className="text-gray-200">
+                                  <div className="flex items-center justify-between gap-2">
+                                    <span className="flex-1">
+                                      {step.label || describeStep(step)}
+                                      {targetText && (
+                                        <span className="ml-2 text-gray-400">{targetText}</span>
+                                      )}
+                                    </span>
+                                    <span
+                                      className={`text-[11px] font-semibold ${stepStatusClass(step.status)}`}
+                                    >
+                                      {step.status || "pending"}
+                                    </span>
+                                  </div>
+                                  {step.error && (
+                                    <div className="text-[11px] text-red-400">{step.error}</div>
+                                  )}
+                                </li>
+                              );
+                            })}
+                          </ol>
+                        ) : (
+                          <div className="text-gray-500">No steps provided.</div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {row?.intent?._raw && (
+                    <div className="mt-2 text-[11px] text-amber-400 bg-amber-900/20 border border-amber-700 rounded p-2">
+                      Raw response preserved for debugging.
+                    </div>
+                  )}
+
                   {/* Meta / Errors */}
-                  <div className="mt-2 text-[11px] text-gray-400 flex justify-between">
-                    <span>
-                      {row?.ts ? `Updated: ${new Date(row.ts).toLocaleTimeString()}` : ""}
-                    </span>
-                    <span className="text-red-400">{row?.error || ""}</span>
+                  <div className="mt-2 text-[11px] text-gray-400 flex flex-wrap gap-2 items-center justify-between">
+                    <div className="flex flex-wrap gap-2 items-center">
+                      {row?.goal && (
+                        <span className="text-gray-300">
+                          Goal: <span className="text-gray-100">{row.goal}</span>
+                        </span>
+                      )}
+                      {latencyText && <span>{latencyText}</span>}
+                      <span>
+                        {row?.ts ? `Updated: ${new Date(row.ts).toLocaleTimeString()}` : ""}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {row?.intent && (
+                        <button
+                          onClick={() => copyIntent(vid)}
+                          className="px-2 py-[3px] rounded bg-gray-700 hover:bg-gray-600 text-gray-200"
+                        >
+                          {copiedVeh === vid ? "Copied!" : "Copy JSON"}
+                        </button>
+                      )}
+                      <span className="text-red-400">{row?.error || ""}</span>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -225,6 +774,13 @@ export default function IntentGeneratorPanel({
 }
 
 /* ---------------- helpers ---------------- */
+
+function nowMs() {
+  if (typeof performance !== "undefined" && typeof performance.now === "function") {
+    return performance.now();
+  }
+  return Date.now();
+}
 
 async function fetchTopFrameBase64(vehId) {
   const url = `${API_BASE}/frame/top/${vehId}.jpg?${Date.now()}`;
@@ -245,44 +801,43 @@ function blobToBase64(blob) {
 }
 
 async function callOpenAIForIntent(apiKey, ctx, topB64) {
-  // Strict, compact instruction with JSON-only output
   const sys = [
-    "You are the Vehicular Agent for an autonomous car.",
-    "Given: goal, current speed_kmh, lane_id and a top-down camera frame (base64).",
-    "Return ONLY compact JSON describing a single-step driving intent and a request to nearby vehicles.",
-    "Fields: {",
-    '  "ego_veh_id": number,',
-    '  "ego_action": "lane left"|"lane right"|"speed up"|"slow down"|"keep",',
-    '  "reason": string,',
-    '  "confidence": number,',
-    '  "request": { "to": string[], "ask": string }',
-    "}",
+    "You are the Vehicular Agent for an autonomous car inside a CARLA-like simulator.",
+    "Given a high-level goal plus the current speed_kmh, lane_id and an optional overhead frame,",
+    "produce a SHORT multi-step driving plan (max 4 steps) needed to satisfy the goal.",
+    'Allowed step actions: "lane_left","lane_right","set_speed","speed_up","speed_down","hold".',
+    "Each step must include a description plus target_lane_id or target_speed_kmh when relevant.",
+    "Respond ONLY as minified JSON with fields:",
+    '{ "ego_veh_id": number, "plan_summary": string, "plan_steps": [{ "id": "step-1", "description": "...", "action": "lane_left", "target_lane_id": number|null, "target_speed_kmh": number|null }], "ego_action": string, "reason": string, "confidence": number, "request": { "to": string[], "ask": string } }',
   ].join(" ");
 
-  const user = {
-    role: "user",
-    content: [
-      { type: "text", text: `goal: ${ctx.goal}\nspeed_kmh: ${ctx.speed_kmh}\nlane_id: ${ctx.lane_id}\nveh_id: ${ctx.veh_id}` },
-      {
-        type: "input_image",
-        image_url: { url: `data:image/jpeg;base64,${topB64}` },
-      },
-    ],
-  };
+  const useImage = Boolean(topB64);
+  const userContent = [
+    {
+      type: "text",
+      text: `goal: ${ctx.goal}\nspeed_kmh: ${ctx.speed_kmh}\nlane_id: ${ctx.lane_id}\nveh_id: ${ctx.veh_id}`,
+    },
+  ];
+  if (useImage) {
+    userContent.push({
+      type: "image_url",
+      image_url: { url: `data:image/jpeg;base64,${topB64}` },
+    });
+  }
 
   const body = {
     model: "gpt-4o-mini",
     messages: [
       { role: "system", content: sys },
-      user,
+      { role: "user", content: userContent },
       {
         role: "user",
         content:
-          "Respond with ONLY valid minified JSON. No prose. Example: {\"ego_veh_id\":101,\"ego_action\":\"keep\",\"reason\":\"...\",\"confidence\":0.73,\"request\":{\"to\":[],\"ask\":\"none\"}}",
+          'Respond with ONLY valid minified JSON. Example: {"ego_veh_id":101,"plan_summary":"Change lane then speed up","plan_steps":[{"id":"step-1","description":"Move to left lane","action":"lane_left","target_lane_id":-2},{"id":"step-2","description":"Accelerate to 40 km/h","action":"set_speed","target_speed_kmh":40}],"ego_action":"lane left","reason":"clear faster lane","confidence":0.78,"request":{"to":[],"ask":"none"}}',
       },
     ],
     temperature: 0.2,
-    max_tokens: 300,
+    max_tokens: 400,
   };
 
   const resp = await fetch("https://api.openai.com/v1/chat/completions", {
@@ -294,13 +849,25 @@ async function callOpenAIForIntent(apiKey, ctx, topB64) {
     body: JSON.stringify(body),
   });
 
+  if (!resp.ok) {
+    const errorText = await resp.text();
+    throw new Error(`OpenAI ${resp.status}: ${errorText}`);
+  }
+
   const data = await resp.json();
+  if (data?.error) {
+    throw new Error(`OpenAI error: ${data.error?.message || data.error?.type || "unknown"}`);
+  }
+
   const txt = (data?.choices?.[0]?.message?.content || "").trim();
+  if (!txt) {
+    throw new Error("OpenAI returned empty content");
+  }
 
   // Best-effort JSON parsing
   try {
     // strip fencing if any
-    const cleaned = txt.replace(/^```json|```$/g, "").trim();
+    const cleaned = txt.replace(/```json|```/g, "").trim();
     const obj = JSON.parse(cleaned);
     // Ensure required fields + veh id
     return {
@@ -312,15 +879,245 @@ async function callOpenAIForIntent(apiKey, ctx, topB64) {
         to: Array.isArray(obj?.request?.to) ? obj.request.to.map(String) : [],
         ask: String(obj?.request?.ask || "none"),
       },
+      plan_summary: obj.plan_summary || "",
+      plan_steps: Array.isArray(obj.plan_steps) ? obj.plan_steps : [],
     };
   } catch (e) {
     return {
       ego_veh_id: ctx.veh_id,
       ego_action: "keep",
-      reason: "fallback: parse error",
+      reason: `fallback: ${e.message || "parse error"}`,
       confidence: 0.1,
       request: { to: [], ask: "none" },
+      plan_summary: "",
+      plan_steps: [],
       _raw: txt,
     };
   }
+}
+
+function buildPlanFromIntent(intent, ctx) {
+  if (!intent) return null;
+  const steps = normalizePlanSteps(intent.plan_steps);
+  if (!steps.length) steps.push(fallbackStepFromIntent(intent));
+  return {
+    id: `plan-${ctx.veh_id}-${Date.now()}`,
+    summary: intent.plan_summary || intent.reason || intent.ego_action || "LLM plan",
+    goal: ctx.goal,
+    createdAt: Date.now(),
+    status: derivePlanStatusFromSteps(steps),
+    steps,
+  };
+}
+
+function normalizePlanSteps(rawSteps) {
+  if (!Array.isArray(rawSteps)) return [];
+  return rawSteps
+    .map((step, idx) => {
+      if (!step) return null;
+      const action = sanitizeAction(
+        step.action || step.command || step.ego_action || step.type || ""
+      );
+      const id = String(step.id || step.step_id || `step-${idx + 1}`);
+      return {
+        id,
+        label: step.description || step.summary || step.reason || describeActionFromCode(action),
+        action,
+        targetLaneId: numberOrNull(step.target_lane_id),
+        targetSpeedKmh: numberOrNull(step.target_speed_kmh),
+        status: "pending",
+      };
+    })
+    .filter(Boolean);
+}
+
+function fallbackStepFromIntent(intent) {
+  const action = sanitizeAction(intent?.ego_action || "");
+  return {
+    id: "step-1",
+    label: intent?.reason || intent?.ego_action || "Maintain lane",
+    action,
+    targetLaneId: numberOrNull(intent?.target_lane_id),
+    targetSpeedKmh: numberOrNull(intent?.target_speed_kmh),
+    status: "pending",
+  };
+}
+
+function sanitizeAction(raw) {
+  const text = String(raw || "")
+    .trim()
+    .toLowerCase();
+  if (!text) return "hold";
+  if (text.includes("lane") && text.includes("left")) return "lane_left";
+  if (text.includes("lane") && text.includes("right")) return "lane_right";
+  if (text.includes("set") && text.includes("speed")) return "set_speed";
+  if (text.includes("speed") && text.includes("up")) return "speed_up";
+  if (text.includes("speed") && (text.includes("down") || text.includes("slow"))) return "speed_down";
+  if (text.includes("brake") || text.includes("stop")) return "brake";
+  return "hold";
+}
+
+function derivePlanStatusFromSteps(steps) {
+  if (!Array.isArray(steps) || !steps.length) return "complete";
+  if (steps.some((s) => s.status === "failed")) return "failed";
+  if (steps.every((s) => s.status === "done")) return "complete";
+  if (steps.some((s) => s.status === "running")) return "running";
+  return "ready";
+}
+
+function isPlanActive(plan, goalText) {
+  if (!plan || plan.goal !== goalText) return false;
+  if (!Array.isArray(plan.steps) || !plan.steps.length) return false;
+  if (plan.status === "failed" || plan.status === "complete") return false;
+  return plan.steps.some((s) => s.status !== "done" && s.status !== "failed");
+}
+
+function buildIntentPayload(vehId, plan, step, baseIntent) {
+  const stepIndex = plan.steps.findIndex((s) => s.id === step.id);
+  return {
+    ego_veh_id: vehId,
+    ego_action: actionToEgoString(step.action),
+    reason: step.label || baseIntent?.reason || plan.summary || "Planner step",
+    confidence: baseIntent?.confidence ?? 0.6,
+    request: baseIntent?.request || { to: [], ask: "none" },
+    target_lane_id: step.targetLaneId ?? null,
+    target_speed_kmh: step.targetSpeedKmh ?? null,
+    plan_id: plan.id,
+    plan_step_id: step.id,
+    plan_step_index: stepIndex,
+    plan_step_total: plan.steps.length,
+    plan_summary: plan.summary,
+  };
+}
+
+function actionToEgoString(action) {
+  switch (action) {
+    case "lane_left":
+      return "lane left";
+    case "lane_right":
+      return "lane right";
+    case "speed_up":
+    case "set_speed":
+      return "speed up";
+    case "speed_down":
+      return "slow down";
+    case "brake":
+      return "brake";
+    default:
+      return "keep";
+  }
+}
+
+function describeStep(step) {
+  return step?.label || describeActionFromCode(step?.action);
+}
+
+function describeActionFromCode(action) {
+  switch (action) {
+    case "lane_left":
+      return "Change to the left lane";
+    case "lane_right":
+      return "Change to the right lane";
+    case "set_speed":
+    case "speed_up":
+      return "Increase speed";
+    case "speed_down":
+      return "Reduce speed";
+    case "brake":
+      return "Brake and hold";
+    default:
+      return "Maintain lane";
+  }
+}
+
+function formatStepTargets(step) {
+  const parts = [];
+  if (Number.isFinite(step?.targetLaneId)) {
+    parts.push(`lane ${step.targetLaneId}`);
+  }
+  if (Number.isFinite(step?.targetSpeedKmh)) {
+    parts.push(`${step.targetSpeedKmh} km/h`);
+  }
+  return parts.length ? `(${parts.join(", ")})` : "";
+}
+
+function planStatusClass(status) {
+  switch (status) {
+    case "complete":
+      return "bg-emerald-900 text-emerald-200";
+    case "failed":
+      return "bg-red-900 text-red-200";
+    case "running":
+      return "bg-blue-900 text-blue-200";
+    default:
+      return "bg-gray-700 text-gray-200";
+  }
+}
+
+function stepStatusClass(status) {
+  switch (status) {
+    case "done":
+      return "text-emerald-300";
+    case "running":
+      return "text-blue-300";
+    case "failed":
+      return "text-red-400";
+    default:
+      return "text-gray-300";
+  }
+}
+
+function hasStepCompleted(step, tele, tracker) {
+  if (!step || !tele) return false;
+  const action = step.action;
+  if (action === "lane_left" || action === "lane_right") {
+    const laneChange = tele.lane_change || {};
+    if (laneChange.state === "DONE") return true;
+    if (
+      Number.isFinite(step.targetLaneId) &&
+      Number.isFinite(tele.lane_id) &&
+      Number(step.targetLaneId) === Number(tele.lane_id) &&
+      laneChange.state !== "EXECUTING"
+    ) {
+      return true;
+    }
+    if (
+      tracker?.startLaneId != null &&
+      tele.lane_id != null &&
+      Number(tracker.startLaneId) !== Number(tele.lane_id) &&
+      laneChange.state !== "EXECUTING"
+    ) {
+      return true;
+    }
+    return false;
+  }
+
+  if (action === "brake") {
+    return (tele.speed_kmh || 0) <= Math.max((tracker?.startSpeedKmh || 0) * 0.25, 5);
+  }
+
+  if (action === "set_speed" || action === "speed_up" || action === "speed_down") {
+    const target =
+      Number.isFinite(step.targetSpeedKmh) && step.targetSpeedKmh != null
+        ? step.targetSpeedKmh
+        : tracker?.targetSpeedKmh;
+    const currentSpeed = Number(tele.speed_kmh || 0);
+    if (Number.isFinite(target)) {
+      return Math.abs(currentSpeed - target) <= SPEED_TOLERANCE_KMH;
+    }
+    if (tracker?.startSpeedKmh != null) {
+      if (action === "speed_down") {
+        return currentSpeed <= tracker.startSpeedKmh - SPEED_TOLERANCE_KMH;
+      }
+      return currentSpeed >= tracker.startSpeedKmh + SPEED_TOLERANCE_KMH;
+    }
+    return false;
+  }
+
+  return true;
+}
+
+function numberOrNull(value) {
+  const num = Number(value);
+  return Number.isFinite(num) ? num : null;
 }

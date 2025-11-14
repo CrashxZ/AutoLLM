@@ -280,6 +280,8 @@ export default function Dashboard() {
         telemetry={telemetry}
         goal={goal}
         periodSec={10}
+        mainVehicleId={selectedVehicle}
+        sendIntent={sendCommand}
       />
       {/* Intent Drawer */}
       {showIntent && (

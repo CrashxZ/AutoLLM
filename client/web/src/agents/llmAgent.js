@@ -134,7 +134,7 @@ async function openAiAgent(observation, goal, apiKey, model = "gpt-4o-mini") {
           type: "text",
           text: `
 You are an autonomous driving planner. Given an observation and a high-level goal,
-produce an intention and a single low-level control action.
+produce an intention and a single low-level control action. (as well as a request to the involved cars if needed)
 
 Goal:
 ${goal}
