@@ -179,6 +179,10 @@ export default function useWebSocket({
     window.dispatchEvent(new CustomEvent("ws-approval", { detail: data }));
     return;
   }
+  if (t === "mec_decision") {
+    window.dispatchEvent(new CustomEvent("ws-mec-decision", { detail: data }));
+    return;
+  }
   }, []);
 
 
@@ -301,4 +305,3 @@ function normalizeCommand(cmd) {
 
   return cmd;
 }
-

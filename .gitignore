@@ -1,2 +1,4 @@
 client/web/node_modules/
 data/
+.env
+client/web/.env

@@ -51,7 +51,7 @@ import random
 import string
 import threading
 from datetime import datetime
-from typing import Dict, List, Optional, Tuple, Any
+from typing import Dict, List, Optional, Tuple, Any, Literal
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Response, Request, HTTPException
 from fastapi.responses import StreamingResponse, JSONResponse , RedirectResponse
@@ -64,6 +64,27 @@ from .webrtc import CarlaVideoTrack, PCS, set_bitrate_cap, close_all_pcs
 from pydantic import BaseModel, Field
 
 import numpy as np
+
+# ---- Environment loader -----------------------------------------------------
+
+def load_env_file():
+    env_path = os.path.join(os.path.dirname(__file__), "..", ".env")
+    try:
+        with open(env_path, "r", encoding="utf-8") as fh:
+            for raw in fh:
+                line = raw.strip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+                key, value = line.split("=", 1)
+                key = key.strip()
+                if not key or key in os.environ:
+                    continue
+                val = value.strip().strip('"').strip("'")
+                os.environ[key] = val
+    except FileNotFoundError:
+        pass
+
+load_env_file()
 
 # ---- CARLA import / setup ----------------------------------------------------
 
@@ -92,6 +113,7 @@ carla = _try_import_carla()
 
 # lane change controller (TM-based) from sibling file
 from .lane_change import LaneChangeController, LaneChangeState
+from .mec import MECController
 
 # ---- FastAPI app -------------------------------------------------------------
 
@@ -141,6 +163,17 @@ class IntentMessage(BaseModel):
     backend: Optional[str] = None
     tier: Optional[str] = None
     goal: Optional[str] = None
+
+class MecReviewPayload(BaseModel):
+    veh_id: int
+    plan: Dict[str, Any] = Field(default_factory=dict)
+    intent: Optional[Dict[str, Any]] = None
+    request: Optional[Dict[str, Any]] = None
+    context: Dict[str, Any] = Field(default_factory=dict)
+    top_frame_b64: Optional[str] = None
+
+class MecConfig(BaseModel):
+    safety_posture: Literal["strict", "balanced", "relaxed"]
 
 # ---- Session state -----------------------------------------------------------
 
@@ -224,6 +257,7 @@ class Session:
         self.telemetry_jsonl = None
 
 SESSION = Session()
+MEC = MECController()
 
 # ---- CARLA lifecycle helpers -------------------------------------------------
 
@@ -918,6 +952,30 @@ def list_vehicles():
 @app.get("/health")
 def health():
     return {"ok": True, "running": SESSION.running, "vehicles": list(SESSION.vehicles.keys())}
+
+@app.post("/mec/review")
+async def mec_review(payload: MecReviewPayload):
+    telemetry = telemetry_snapshot()
+    result = await MEC.review(payload, telemetry)
+    broadcast_ws_json({"type": "mec_decision", **result})
+    return result
+
+@app.get("/mec/history")
+def mec_history():
+    return {"decisions": MEC.get_history()}
+
+@app.get("/mec/config")
+def mec_config():
+    return {"safety_posture": MEC.get_safety_posture()}
+
+@app.post("/mec/config")
+def update_mec_config(cfg: MecConfig):
+    try:
+        MEC.set_safety_posture(cfg.safety_posture)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc))
+    updated = MEC.get_safety_posture()
+    return {"safety_posture": updated}
 
 @app.get("/spawns")
 def list_spawns():

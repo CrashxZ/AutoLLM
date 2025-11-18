@@ -80,80 +80,94 @@ export default function TelemetryPanel({ telemetry, selectedVehId }) {
     }
   }, [vehList, selected]);
 
+  const [activeSection, setActiveSection] = useState("selected");
+
   return (
-    <div className="w-full bg-gray-850 bg-gray-900/80 border-t border-gray-700 grid grid-cols-1 md:grid-cols-3 gap-3 p-3">
-      {/* Selected vehicle details */}
-      <div className="bg-gray-800 border border-gray-700 rounded-lg p-3">
-        <h3 className="text-sm font-semibold text-gray-200 mb-2">
-          Selected Vehicle
-        </h3>
-        {selected ? (
-          <>
-            <KV k="Vehicle ID" v={selected.veh_id} />
-            <KV k="Speed (km/h)" v={fmt(selected.speed_kmh, 1)} />
-            <KV k="Lane" v={`${selected.lane_id ?? "-"} (${selected.lane_type ?? "-"})`} />
-            <KV k="Junction" v={selected.is_junction ? "Yes" : "No"} />
-            <KV k="Dist to Center" v={fmt(selected.distance_to_center, 2)} />
-            <KV k="Goal Dist" v={fmt(selected.goal_distance, 1)} />
-            <KV k="Lane Change" v={fmtLc(selected.lane_change)} />
-            <KV k="Yaw" v={fmt(selected?.pose?.yaw, 1)} />
-          </>
-        ) : (
-          <div className="text-sm text-gray-400">No vehicle selected.</div>
-        )}
+    <div className="w-full bg-gray-900/80 border-t border-gray-700 flex flex-col gap-3 p-3">
+      <div className="flex flex-wrap gap-2 text-xs">
+        {[
+          { id: "selected", label: "Selected Vehicle" },
+          { id: "speed", label: "Speed History" },
+          { id: "fleet", label: "All Vehicles" },
+        ].map((tab) => (
+          <button
+            key={tab.id}
+            onClick={() => setActiveSection(tab.id)}
+            className={`px-3 py-1 rounded font-semibold ${
+              activeSection === tab.id ? "bg-indigo-600 text-white" : "bg-gray-800 text-gray-300 hover:bg-gray-700"
+            }`}
+          >
+            {tab.label}
+          </button>
+        ))}
       </div>
 
-      {/* Speed chart */}
-      <div className="bg-gray-800 border border-gray-700 rounded-lg p-3">
-        <h3 className="text-sm font-semibold text-gray-200 mb-2">
-          Speed History (Selected)
-        </h3>
-        <MiniChart data={speedHist} />
-        <div className="mt-2 text-xs text-gray-400">
-          Samples: {speedHist.length}/{MAX_HISTORY}
+      {activeSection === "selected" && (
+        <div className="bg-gray-800 border border-gray-700 rounded-lg p-3">
+          <h3 className="text-sm font-semibold text-gray-200 mb-2">Selected Vehicle</h3>
+          {selected ? (
+            <>
+              <KV k="Vehicle ID" v={selected.veh_id} />
+              <KV k="Speed (km/h)" v={fmt(selected.speed_kmh, 1)} />
+              <KV k="Lane" v={`${selected.lane_id ?? "-"} (${selected.lane_type ?? "-"})`} />
+              <KV k="Junction" v={selected.is_junction ? "Yes" : "No"} />
+              <KV k="Dist to Center" v={fmt(selected.distance_to_center, 2)} />
+              <KV k="Goal Dist" v={fmt(selected.goal_distance, 1)} />
+              <KV k="Lane Change" v={fmtLc(selected.lane_change)} />
+              <KV k="Yaw" v={fmt(selected?.pose?.yaw, 1)} />
+            </>
+          ) : (
+            <div className="text-sm text-gray-400">No vehicle selected.</div>
+          )}
         </div>
-      </div>
+      )}
 
-      {/* All vehicles table */}
-      <div className="bg-gray-800 border border-gray-700 rounded-lg p-3 overflow-auto">
-        <h3 className="text-sm font-semibold text-gray-200 mb-2">
-          All Vehicles
-        </h3>
-        <table className="w-full text-xs">
-          <thead className="text-gray-400">
-            <tr className="text-left border-b border-gray-700">
-              <th className="py-1 pr-2">ID</th>
-              <th className="py-1 pr-2">Speed</th>
-              <th className="py-1 pr-2">Lane</th>
-              <th className="py-1 pr-2">LC</th>
-              <th className="py-1 pr-2">Jct</th>
-              <th className="py-1 pr-2">d2c</th>
-            </tr>
-          </thead>
-          <tbody>
-            {vehList.map((v) => (
-              <tr
-                key={v.veh_id}
-                className={`border-b border-gray-800 ${
-                  selectedVehId === v.veh_id ? "bg-gray-700/40" : ""
-                }`}
-              >
-                <td className="py-1 pr-2">{v.veh_id}</td>
-                <td className="py-1 pr-2">{fmt(v.speed_kmh, 1)}</td>
-                <td className="py-1 pr-2">
-                  {v.lane_id ?? "-"} <span className="text-gray-500">({v.lane_type ?? "-"})</span>
-                </td>
-                <td className="py-1 pr-2">{fmtLc(v.lane_change)}</td>
-                <td className="py-1 pr-2">{v.is_junction ? "Y" : "N"}</td>
-                <td className="py-1 pr-2">{fmt(v.distance_to_center, 2)}</td>
+      {activeSection === "speed" && (
+        <div className="bg-gray-800 border border-gray-700 rounded-lg p-3">
+          <h3 className="text-sm font-semibold text-gray-200 mb-2">Speed History (Selected)</h3>
+          <MiniChart data={speedHist} />
+          <div className="mt-2 text-xs text-gray-400">
+            Samples: {speedHist.length}/{MAX_HISTORY}
+          </div>
+        </div>
+      )}
+
+      {activeSection === "fleet" && (
+        <div className="bg-gray-800 border border-gray-700 rounded-lg p-3 overflow-auto">
+          <h3 className="text-sm font-semibold text-gray-200 mb-2">All Vehicles</h3>
+          <table className="w-full text-xs">
+            <thead className="text-gray-400">
+              <tr className="text-left border-b border-gray-700">
+                <th className="py-1 pr-2">ID</th>
+                <th className="py-1 pr-2">Speed</th>
+                <th className="py-1 pr-2">Lane</th>
+                <th className="py-1 pr-2">LC</th>
+                <th className="py-1 pr-2">Jct</th>
+                <th className="py-1 pr-2">d2c</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+            </thead>
+            <tbody>
+              {vehList.map((v) => (
+                <tr
+                  key={v.veh_id}
+                  className={`border-b border-gray-800 ${selectedVehId === v.veh_id ? "bg-gray-700/40" : ""}`}
+                >
+                  <td className="py-1 pr-2">{v.veh_id}</td>
+                  <td className="py-1 pr-2">{fmt(v.speed_kmh, 1)}</td>
+                  <td className="py-1 pr-2">
+                    {v.lane_id ?? "-"} <span className="text-gray-500">({v.lane_type ?? "-"})</span>
+                  </td>
+                  <td className="py-1 pr-2">{fmtLc(v.lane_change)}</td>
+                  <td className="py-1 pr-2">{v.is_junction ? "Y" : "N"}</td>
+                  <td className="py-1 pr-2">{fmt(v.distance_to_center, 2)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
 
-      {/* Rolling log (full width on small, span 3 on md) */}
-      <div className="bg-gray-800 border border-gray-700 rounded-lg p-3 md:col-span-3 max-h-44 overflow-auto">
+      <div className="bg-gray-800 border border-gray-700 rounded-lg p-3 max-h-44 overflow-auto">
         <h3 className="text-sm font-semibold text-gray-200 mb-2">
           Rolling Log (last {MAX_LOG})
         </h3>

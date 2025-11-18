@@ -2,6 +2,7 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 
 const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:8000";
+const OPENAI_API_KEY = import.meta.env.VITE_OPENAI_API_KEY || "";
 const SPEED_TOLERANCE_KMH = 2.5;
 const STEP_RESEND_INTERVAL_MS = 3000;
 const STEP_MAX_RUNTIME_MS = 25000;
@@ -30,9 +31,8 @@ export default function IntentGeneratorPanel({
   mainVehicleId = null,
   sendIntent = null,
 }) {
-  const [apiKey, setApiKey] = useState(localStorage.getItem("openai_api_key") || "");
   const [enabled, setEnabled] = useState({}); // { [vehId]: boolean }
-  const [rows, setRows] = useState({}); // { [vehId]: { topB64, ctx, intent, ts, error, goal, latencyMs, latencyHistory } }
+  const [rows, setRows] = useState({}); // { [vehId]: { topB64, ctx, intent, plan, mec, ts, error, goal, latencyMs, latencyHistory } }
   const [goalOverrides, setGoalOverrides] = useState({}); // { [vehId]: string }
   const [busy, setBusy] = useState(false);
   const [copiedVeh, setCopiedVeh] = useState(null);
@@ -41,16 +41,10 @@ export default function IntentGeneratorPanel({
   const latestRef = useRef(null);
   const stepTrackersRef = useRef({});
   const DEFAULT_GOAL = "Drive safely and keep lane discipline.";
-  const hasApiKey = apiKey.trim().length > 0;
+  const hasApiKey = OPENAI_API_KEY.trim().length > 0;
   const runDisabled = !hasApiKey || busy;
   const sendIntentFn = typeof sendIntent === "function" ? sendIntent : null;
   const mainEnabled = mainVehicleId != null ? !!enabled[mainVehicleId] : false;
-
-  useEffect(() => {
-    const trimmed = apiKey.trim();
-    if (trimmed) localStorage.setItem("openai_api_key", trimmed);
-    else localStorage.removeItem("openai_api_key");
-  }, [apiKey]);
 
   useEffect(() => {
     latestRef.current = {
@@ -59,24 +53,12 @@ export default function IntentGeneratorPanel({
       goal,
       goalOverrides,
       enabled,
-      apiKey: apiKey.trim(),
       hasApiKey,
       mainVehicleId,
       sendIntentFn,
       rows,
     };
-  }, [
-    vehicles,
-    telemetry,
-    goal,
-    goalOverrides,
-    enabled,
-    apiKey,
-    hasApiKey,
-    mainVehicleId,
-    sendIntentFn,
-    rows,
-  ]);
+  }, [vehicles, telemetry, goal, goalOverrides, enabled, hasApiKey, mainVehicleId, sendIntentFn, rows]);
 
   useEffect(() => {
     if (copiedVeh == null) return undefined;
@@ -151,6 +133,35 @@ export default function IntentGeneratorPanel({
     });
   }, [rows]);
 
+  const applyMecDecision = useCallback((vehId, ctx, mecResult) => {
+    const normalized = normalizeMecDecision(mecResult);
+    const key = String(vehId);
+    const decisionLower = (normalized.decision || "").toLowerCase();
+    setRows((prev) => {
+      const prevRow = prev[key] ?? prev[vehId];
+      if (!prevRow) return prev;
+      let nextPlan = prevRow.plan;
+      if (normalized.plan) {
+        const overridePlan = buildPlanFromMecPlan(normalized.plan, ctx);
+        if (overridePlan) {
+          nextPlan = overridePlan;
+        }
+      } else if (decisionLower === "reject" && nextPlan) {
+        nextPlan = markPlanRejected(nextPlan);
+      }
+      const next = { ...prev };
+      next[key] = {
+        ...prevRow,
+        plan: nextPlan,
+        mec: normalized,
+      };
+      return next;
+    });
+    if (normalized.plan || decisionLower === "reject") {
+      delete stepTrackersRef.current[key];
+    }
+  }, []);
+
   const runCycle = useCallback(async () => {
     const state = latestRef.current;
     if (!state) return;
@@ -164,7 +175,7 @@ export default function IntentGeneratorPanel({
     busyRef.current = true;
     setBusy(true);
     try {
-      const key = state.apiKey;
+      const key = OPENAI_API_KEY;
       const {
         vehicles: vehs,
         enabled: enabledMap,
@@ -181,7 +192,7 @@ export default function IntentGeneratorPanel({
         const override = (state.goalOverrides?.[vid] || "").trim();
         const goalText = override || panelGoal || DEFAULT_GOAL;
         const existingRow = currentRows?.[vid];
-        const planActive = isPlanActive(existingRow?.plan, goalText);
+        const planActive = isPlanActive(existingRow?.plan, goalText, existingRow?.mec);
         const startTs = nowMs();
 
         try {
@@ -213,7 +224,7 @@ export default function IntentGeneratorPanel({
 
           const intent = await callOpenAIForIntent(key, ctx, topB64);
           const latencyMs = Math.max(0, nowMs() - startTs);
-          const plan = buildPlanFromIntent(intent, ctx);
+          const plan = buildPlanFromIntent(intent, ctx, "vehicular_agent");
 
           setRows((prev) => {
             const prevRow = prev?.[vid] || {};
@@ -228,6 +239,10 @@ export default function IntentGeneratorPanel({
                 ctx,
                 intent,
                 plan,
+                mec: {
+                  decision: "pending",
+                  reason: "Awaiting MEC approval",
+                },
                 ts: Date.now(),
                 error: null,
                 goal: goalText,
@@ -236,6 +251,33 @@ export default function IntentGeneratorPanel({
               },
             };
           });
+
+          try {
+            const mecResult = await requestMecApproval({
+              vehId: vid,
+              plan,
+              ctx,
+              intent,
+              topFrameB64: topB64,
+              telemetry: state.telemetry,
+            });
+            applyMecDecision(vid, ctx, mecResult);
+          } catch (mecErr) {
+            console.error("MEC approval failed:", mecErr);
+            setRows((prev) => {
+              const prevRow = prev?.[vid] || {};
+              return {
+                ...prev,
+                [vid]: {
+                  ...prevRow,
+                  mec: {
+                    decision: "error",
+                    reason: String(mecErr),
+                  },
+                },
+              };
+            });
+          }
 
           console.log(
             `[IntentGenerator] Vehicle ${vid} plan latency ${latencyMs.toFixed(1)} ms`
@@ -260,7 +302,7 @@ export default function IntentGeneratorPanel({
       busyRef.current = false;
       setBusy(false);
     }
-  }, []);
+  }, [applyMecDecision]);
 
   // Clear interval on unmount
   useEffect(() => {
@@ -327,7 +369,8 @@ export default function IntentGeneratorPanel({
   const issueStepCommand = useCallback(
     (vehId, row, step, tele) => {
       if (!sendIntentFn || !row?.plan) return;
-      const payload = buildIntentPayload(vehId, row.plan, step, row.intent);
+      if (!isMecApproved(row?.mec)) return;
+      const payload = buildIntentPayload(vehId, row.plan, step, row.intent, row.mec);
       const message = { cmd: "intent", veh_id: vehId, intent: payload };
       sendIntentFn(message);
       const trackerKey = String(vehId);
@@ -360,6 +403,9 @@ export default function IntentGeneratorPanel({
       if (!enabled[vid]) return;
       const plan = row?.plan;
       if (!plan || plan.status === "complete" || plan.status === "failed") {
+        return;
+      }
+      if (!isMecApproved(row?.mec)) {
         return;
       }
 
@@ -518,16 +564,12 @@ export default function IntentGeneratorPanel({
       {/* Header / Controls */}
       <div className="flex items-center justify-between px-4 py-2 bg-gray-800 border-b border-gray-700">
         <div className="text-sm font-semibold">Vehicular AI (Intent Generator)</div>
-        <div className="flex items-center gap-2 flex-wrap justify-end">
-          <input
-            type="password"
-            placeholder="OpenAI API Key"
-            value={apiKey}
-            onChange={(e) => setApiKey(e.target.value)}
-            className="bg-gray-700 rounded px-2 py-1 text-xs w-64"
-          />
-          <span className="text-xs text-gray-400">
+        <div className="flex items-center gap-3 flex-wrap justify-end text-xs">
+          <span className="text-gray-400">
             Period: {periodSec}s {busy ? "• running…" : ""}
+          </span>
+          <span className={`px-2 py-[3px] rounded ${hasApiKey ? "bg-gray-700 text-emerald-300" : "bg-gray-700 text-amber-300"}`}>
+            {hasApiKey ? "OpenAI key loaded from env" : "Missing VITE_OPENAI_API_KEY"}
           </span>
           <button
             onClick={runCycle}
@@ -538,11 +580,6 @@ export default function IntentGeneratorPanel({
           >
             Run once
           </button>
-          {!hasApiKey && (
-            <span className="text-[11px] text-amber-400">
-              Enter an OpenAI API key to enable polling.
-            </span>
-          )}
         </div>
       </div>
 
@@ -699,6 +736,15 @@ export default function IntentGeneratorPanel({
                             {row.plan.status || "pending"}
                           </span>
                         </div>
+                        {row?.mec && (
+                          <div
+                            className={`text-[11px] px-2 py-[3px] rounded ${mecStatusClass(
+                              row.mec.decision
+                            )}`}
+                          >
+                            MEC: {formatMecDecision(row.mec)}
+                          </div>
+                        )}
                         {row.plan.steps?.length ? (
                           <ol className="list-decimal ml-4 space-y-1">
                             {row.plan.steps.map((step) => {
@@ -896,17 +942,75 @@ async function callOpenAIForIntent(apiKey, ctx, topB64) {
   }
 }
 
-function buildPlanFromIntent(intent, ctx) {
+async function requestMecApproval({ vehId, plan, ctx, intent, topFrameB64, telemetry }) {
+  const payload = {
+    veh_id: vehId,
+    plan,
+    intent,
+    context: {
+      goal: ctx.goal,
+      speed_kmh: ctx.speed_kmh,
+      lane_id: ctx.lane_id,
+      telemetry: buildTelemetrySummary(telemetry),
+    },
+    top_frame_b64: topFrameB64,
+  };
+  const resp = await fetch(`${API_BASE}/mec/review`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (resp.status === 404) {
+    return {
+      decision: "allow",
+      reason: "MEC endpoint unavailable — bypassing safety layer.",
+      decision_id: null,
+    };
+  }
+  if (!resp.ok) {
+    const txt = await resp.text();
+    throw new Error(`MEC ${resp.status}: ${txt}`);
+  }
+  const data = await resp.json();
+  return data;
+}
+
+function buildTelemetrySummary(telemetry, limit = 10) {
+  if (!telemetry) return [];
+  const values = Object.values(telemetry)
+    .filter(Boolean)
+    .sort((a, b) => (a.veh_id ?? 0) - (b.veh_id ?? 0));
+  return values.slice(0, limit).map((item) => ({
+    veh_id: item.veh_id,
+    speed_kmh: item.speed_kmh,
+    lane_id: item.lane_id,
+    distance_to_center: item.distance_to_center,
+    lane_change: item.lane_change,
+  }));
+}
+
+function buildPlanFromIntent(intent, ctx, source = "vehicular_agent") {
   if (!intent) return null;
   const steps = normalizePlanSteps(intent.plan_steps);
   if (!steps.length) steps.push(fallbackStepFromIntent(intent));
+  return createPlanFromSteps(
+    ctx,
+    steps,
+    intent.plan_summary || intent.reason || intent.ego_action || "LLM plan",
+    source
+  );
+}
+
+function createPlanFromSteps(ctx, steps, summary, source = "vehicular_agent", planId) {
+  const id = planId || `plan-${ctx.veh_id}-${Date.now()}`;
   return {
-    id: `plan-${ctx.veh_id}-${Date.now()}`,
-    summary: intent.plan_summary || intent.reason || intent.ego_action || "LLM plan",
+    id,
+    summary,
     goal: ctx.goal,
     createdAt: Date.now(),
     status: derivePlanStatusFromSteps(steps),
     steps,
+    source,
   };
 }
 
@@ -943,6 +1047,14 @@ function fallbackStepFromIntent(intent) {
   };
 }
 
+function buildPlanFromMecPlan(mecPlan, ctx) {
+  if (!mecPlan) return null;
+  const rawSteps = Array.isArray(mecPlan.steps) ? mecPlan.steps : Array.isArray(mecPlan) ? mecPlan : [];
+  const steps = normalizePlanSteps(rawSteps);
+  if (!steps.length) return null;
+  return createPlanFromSteps(ctx, steps, mecPlan.summary || "MEC override plan", "mec");
+}
+
 function sanitizeAction(raw) {
   const text = String(raw || "")
     .trim()
@@ -965,14 +1077,15 @@ function derivePlanStatusFromSteps(steps) {
   return "ready";
 }
 
-function isPlanActive(plan, goalText) {
+function isPlanActive(plan, goalText, mec) {
   if (!plan || plan.goal !== goalText) return false;
   if (!Array.isArray(plan.steps) || !plan.steps.length) return false;
   if (plan.status === "failed" || plan.status === "complete") return false;
+  if (mec && ["reject", "error"].includes((mec.decision || "").toLowerCase())) return false;
   return plan.steps.some((s) => s.status !== "done" && s.status !== "failed");
 }
 
-function buildIntentPayload(vehId, plan, step, baseIntent) {
+function buildIntentPayload(vehId, plan, step, baseIntent, mec) {
   const stepIndex = plan.steps.findIndex((s) => s.id === step.id);
   return {
     ego_veh_id: vehId,
@@ -987,6 +1100,8 @@ function buildIntentPayload(vehId, plan, step, baseIntent) {
     plan_step_index: stepIndex,
     plan_step_total: plan.steps.length,
     plan_summary: plan.summary,
+    mec_decision_id: mec?.decision_id || null,
+    mec_decision: mec?.decision || null,
   };
 }
 
@@ -1065,6 +1180,61 @@ function stepStatusClass(status) {
     default:
       return "text-gray-300";
   }
+}
+
+function mecStatusClass(decision) {
+  switch ((decision || "").toLowerCase()) {
+    case "allow":
+    case "approved":
+      return "bg-emerald-900/60 text-emerald-200";
+    case "override":
+      return "bg-indigo-900/60 text-indigo-200";
+    case "reject":
+    case "error":
+      return "bg-red-900/50 text-red-200";
+    case "pending":
+      return "bg-amber-900/40 text-amber-200";
+    default:
+      return "bg-gray-800 text-gray-200";
+  }
+}
+
+function formatMecDecision(mec) {
+  if (!mec) return "pending";
+  const decision = mec.decision || "pending";
+  const reason = mec.reason ? ` – ${mec.reason}` : "";
+  return `${decision}${reason}`;
+}
+
+function normalizeMecDecision(result) {
+  if (!result) {
+    return { decision: "error", reason: "No MEC response" };
+  }
+  return {
+    decision: (result.decision || "allow").toLowerCase(),
+    reason: result.reason || "",
+    plan: result.plan || null,
+    model: result.model || "",
+    ts: result.ts || Date.now() / 1000,
+    decision_id: result.decision_id || null,
+  };
+}
+
+function markPlanRejected(plan) {
+  if (!plan) return plan;
+  const steps = Array.isArray(plan.steps)
+    ? plan.steps.map((step) => ({ ...step, status: "failed" }))
+    : [];
+  return {
+    ...plan,
+    steps,
+    status: "failed",
+  };
+}
+
+function isMecApproved(mec) {
+  const decision = (mec?.decision || "").toLowerCase();
+  return decision === "allow" || decision === "approved" || decision === "override";
 }
 
 function hasStepCompleted(step, tele, tracker) {

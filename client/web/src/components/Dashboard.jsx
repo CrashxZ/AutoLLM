@@ -4,6 +4,8 @@ import ControlPanel from "./ControlPanel.jsx";
 import IntentPanel from "./IntentPanel.jsx";
 import ConfigDrawer from "./ConfigDrawer.jsx";
 import IntentGeneratorPanel from "./IntentGeneratorPanel.jsx";
+import MecPanel from "./MecPanel.jsx";
+import TelemetryPanel from "./TelemetryPanel.jsx";
 
 import useWebSocket from "../hooks/useWebSocket.js";       // default export (your hook)
 import useFrameCapture from "../hooks/useFrameCapture.js"; // default export (legacy capture)
@@ -22,10 +24,25 @@ const VIEWS = ["front", "top", "global"];
  * - Preserves your config/reset/export/intent controls and selectors
  */
 
-function IntentionDivider() {
+function DashboardTabs({ active, onChange }) {
+  const options = [
+    { id: "overview", label: "Overview" },
+    { id: "intent", label: "Vehicular Intent Generator" },
+    { id: "mec", label: "MEC Decision Center" },
+  ];
   return (
-    <div className="w-full bg-gray-800 text-center py-1 border-t border-b border-gray-700 text-xs text-gray-400">
-      Vehicular AI Intention Generator
+    <div className="bg-gray-900 border-b border-gray-800 px-4 py-2 flex gap-2">
+      {options.map((opt) => (
+        <button
+          key={opt.id}
+          onClick={() => onChange(opt.id)}
+          className={`px-3 py-1 rounded text-xs font-semibold ${
+            active === opt.id ? "bg-indigo-600 text-white" : "bg-gray-800 text-gray-300 hover:bg-gray-700"
+          }`}
+        >
+          {opt.label}
+        </button>
+      ))}
     </div>
   );
 }
@@ -48,6 +65,7 @@ export default function Dashboard() {
   const [showConfig, setShowConfig] = useState(false);
   const [showIntent, setShowIntent] = useState(false);
   const [view, setView] = useState("front"); // "front" | "top" | "global"
+  const [activeTab, setActiveTab] = useState("overview");
 
   // ---- FPS tracker for MJPEG <img> ----
   const [fps, setFps] = useState(0);
@@ -80,12 +98,6 @@ export default function Dashboard() {
     setSelectedVehicle(vehicles[0]);
   }
   }, [vehicles]);
-
-  // Derived telemetry for selected vehicle
-  const vehTele = useMemo(() => {
-    if (!selectedVehicle) return null;
-    return telemetry?.[String(selectedVehicle)] || null;
-  }, [telemetry, selectedVehicle]);
 
   // Command wrapper to always include veh_id when needed
   const sendWrapped = useCallback(
@@ -192,97 +204,82 @@ export default function Dashboard() {
         </div>
       </header>
 
-      {/* Main */}
-      <div className="flex flex-1 overflow-hidden">
-        {/* Video area */}
-        <div className="flex-1 relative bg-black flex flex-col">
-          {/* View selector */}
-          <div className="p-2 flex items-center gap-2 bg-gray-800 border-b border-gray-700">
-            <span className="text-xs text-gray-300">View:</span>
-            <div className="inline-flex rounded overflow-hidden border border-gray-600">
+      <div className="flex flex-col flex-1 overflow-hidden">
+        <DashboardTabs active={activeTab} onChange={setActiveTab} />
+
+        <div className={`flex flex-1 overflow-hidden ${activeTab === "overview" ? "" : "hidden"}`}>
+          {/* Video area */}
+          <div className="flex-1 relative bg-black flex flex-col">
+            {/* View selector */}
+            <div className="p-2 flex items-center gap-2 bg-gray-800 border-b border-gray-700">
               {VIEWS.map((v) => (
                 <button
                   key={v}
                   onClick={() => setView(v)}
-                  className={`px-3 py-1 text-sm ${
-                    view === v ? "bg-gray-700" : "bg-gray-800 hover:bg-gray-700"
+                  className={`px-3 py-1 rounded text-sm font-semibold ${
+                    view === v ? "bg-indigo-600" : "bg-gray-700 hover:bg-gray-600"
                   }`}
                 >
-                  {v === "front" ? "Front" : v === "top" ? "Top" : "Global"}
+                  {v.toUpperCase()}
                 </button>
               ))}
+              <span className="text-xs text-gray-400 ml-auto">{connected ? "LIVE" : "OFFLINE"}</span>
+              <span className="text-xs text-gray-400">FPS: {fps.toFixed(1)}</span>
             </div>
-            <div className="ml-auto text-xs text-gray-400">
-              FPS: {fps.toFixed(1)}
-            </div>
-          </div>
-          
-
-          {/* Stream */}
-          <div className="flex-1 min-h-0 flex items-center justify-center">
-            {streamUrl ? (
-              <img
-                src={streamUrl}
-                alt={`CARLA ${view} stream`}
-                onLoad={onFrameLoad}
-                className="object-contain w-full h-full select-none"
-                crossOrigin="anonymous"
-              />
-            ) : (
-              <div className="text-gray-400">
-                {view === "global"
-                  ? "Global stream is initializing…"
-                  : "Select a vehicle to view stream."}
-              </div>
-            )}
-          </div>
-
-          {/* Overlay HUD (only shows veh telemetry for front/top) */}
-          {(view === "front" || view === "top") && vehTele && (
-            <div className="absolute top-2 left-2 bg-black/60 text-xs rounded p-2 leading-tight">
-              <div>ID: {vehTele.veh_id ?? selectedVehicle}</div>
-              {Number.isFinite(vehTele.speed_kmh) && (
-                <div>Speed: {vehTele.speed_kmh.toFixed?.(1)} km/h</div>
+            {/* Stream */}
+            <div className="flex-1 flex items-center justify-center bg-black">
+              {streamUrl ? (
+                <img
+                  src={streamUrl}
+                  alt={view}
+                  className="max-h-full max-w-full object-contain"
+                  onLoad={onFrameLoad}
+                />
+              ) : (
+                <div className="text-gray-500">Select a vehicle to view video.</div>
               )}
-              <div>Lane: {vehTele.lane_id}</div>
-              <div>LC: {vehTele.lane_change?.state} {vehTele.lane_change?.direction}</div>
-              <div>Conn: {status}</div>
-              <div>Mode: {mode}</div>
             </div>
-          )}
+            {/* Telemetry */}
+            <TelemetryPanel telemetry={telemetry} selectedVehId={selectedVehicle} />
+          </div>
+
+          {/* Controls */}
+          <ControlPanel
+            view={view}
+            onViewChange={setView}
+            mode={mode}
+            onModeChange={setMode}
+            selectedVehicle={selectedVehicle}
+            setSelectedVehicle={(id) => {
+              setSelectedVehicle(id);
+              if (view === "global") setView("front"); // if user selects a vehicle while on global, flip to a vehicle view
+            }}
+            vehicles={vehicles}
+            sendCommand={sendWrapped}
+            goal={goal}
+            onGoalSubmit={handleGoalSubmit}
+            startCapture={handleStartCapture}
+            stopCapture={stopCapture}
+            isCapturing={isCapturing}
+            openIntentPanel={() => setShowIntent(true)}
+          />
         </div>
 
-        {/* Controls (vehicle select, mode, goal, manual/LLM, capture & intent) */}
-        <ControlPanel
-          view={view}
-          onViewChange={(v) => setView(v)}
-          mode={mode}
-          onModeChange={setMode}
-          selectedVehicle={selectedVehicle}
-          setSelectedVehicle={(id) => {
-            setSelectedVehicle(id);
-            if (view === "global") setView("front"); // if user selects a vehicle while on global, flip to a vehicle view
-          }}
-          vehicles={vehicles}
-          sendCommand={sendWrapped}
-          goal={goal}
-          onGoalSubmit={handleGoalSubmit}
-          startCapture={handleStartCapture}
-          stopCapture={stopCapture}
-          isCapturing={isCapturing}
-          openIntentPanel={() => setShowIntent(true)}
-        />
+        <div className={`flex-1 overflow-auto ${activeTab === "intent" ? "" : "hidden"}`}>
+          <IntentGeneratorPanel
+            vehicles={vehicles}
+            telemetry={telemetry}
+            goal={goal}
+            periodSec={10}
+            mainVehicleId={selectedVehicle}
+            sendIntent={sendCommand}
+          />
+        </div>
+
+        <div className={`flex-1 overflow-auto ${activeTab === "mec" ? "" : "hidden"}`}>
+          <MecPanel />
+        </div>
       </div>
-      {/* Vehicular AI panel (intent only) */}
-      <IntentionDivider />
-      <IntentGeneratorPanel
-        vehicles={vehicles}
-        telemetry={telemetry}
-        goal={goal}
-        periodSec={10}
-        mainVehicleId={selectedVehicle}
-        sendIntent={sendCommand}
-      />
       {/* Intent Drawer */}
       {showIntent && (
         <div className="fixed right-0 top-0 bottom-0 w-80 border-l border-gray-700 bg-gray-900 z-50">

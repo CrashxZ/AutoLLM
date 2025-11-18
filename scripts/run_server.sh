@@ -76,10 +76,10 @@ exec 3>&-
 
 echo "[INFO] CARLA reachable. Launching FastAPI (port ${API_PORT}) ..."
 # ---------- Launch uvicorn ----------
-if [[ -f "server/server2.py" ]]; then
-  APP_PATH="server.server2:app"
-elif [[ -f "server2.py" ]]; then
-  APP_PATH="server2:app"
+if [[ -f "server/server.py" ]]; then
+  APP_PATH="server.server:app"
+elif [[ -f "server.py" ]]; then
+  APP_PATH="server:app"
 else
   echo "[ERROR] Cannot locate server/server2.py. Run from repo root (carla-ai-loop/)."
   exit 1
