@@ -86,6 +86,10 @@ Vite defaults to `http://localhost:5173`, proxying API/WebSocket calls to the ba
 - `client/web/src/App.jsx` contains legacy scaffold code and duplicate hook declarations; use `Dashboard.jsx` or `WebRTCDashboard.jsx` as the authoritative client entry points.
 - Two FastAPI entry modules (`server/server.py`, `server/server2.py`) exist; `server/server.py` is the current default and should be edited preferentially.
 - Session artifacts (frames + telemetry) accumulate under `data/logs/<timestamp>/`; ensure sufficient disk space for long captures.
+- Logging files per session:
+  - `telemetry.jsonl`: per-tick telemetry for all vehicles (`vehicles` map keyed by veh_id) with the last known `intent` per vehicle.
+  - `mec_reviews.jsonl`: MEC decisions `{ts, veh_id, source:"mec", intent:<decision>, telemetry:<veh snapshot>, goal}`.
+  - `vehicular/<veh_id>.jsonl`: per-vehicle logs `{ts, veh_id, source:"vehicle_intent"|"mec", intent, telemetry, goal}`.
 
 ---
 

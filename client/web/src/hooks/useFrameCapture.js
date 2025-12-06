@@ -47,6 +47,8 @@ export default function useFrameCapture({
 
   // timers
   const timerRef = useRef(null);
+  const activeVehRef = useRef(defaultVehId);
+  const frameCounterRef = useRef(0);
 
   // local config
   const getHz = () => {
@@ -103,7 +105,7 @@ export default function useFrameCapture({
   }, [telemetrySource]);
 
   const takeSnapshot = useCallback(async () => {
-    const vehId = activeVehId ?? inferVehId();
+    const vehId = activeVehRef.current ?? inferVehId();
     if (!vehId) return; // can't snapshot without a vehicle id
 
     const url = fetchFrameUrl?.(vehId);
@@ -117,7 +119,7 @@ export default function useFrameCapture({
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
       const blob = await resp.blob();
 
-      const frameId = count; // local monotonic counter (server sim_frame not exposed here)
+      const frameId = frameCounterRef.current;
       const ts = tele?.ts ?? Date.now() / 1000;
       const fname = `images/frame_${String(frameId).padStart(6, "0")}.jpg`;
 
@@ -166,24 +168,29 @@ export default function useFrameCapture({
       // Image
       imagesRef.current.push({ filename: fname, blob });
 
-      // bump the local frame counter
-      setCount((c) => c + 1);
+      frameCounterRef.current += 1;
+      setCount(frameCounterRef.current);
     } catch (e) {
       // Non-fatal; keep trying on next tick
       // console.warn("[capture] snapshot failed:", e);
     }
-  }, [activeVehId, inferVehId, fetchFrameUrl, telemetrySource, count]);
+  }, [inferVehId, fetchFrameUrl, telemetrySource]);
 
   const startCapture = useCallback((vehId) => {
-    if (isCapturing) return;
+    if (isCapturing) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
     const id = vehId ?? inferVehId();
     if (!id) {
       alert("No vehicle available to capture. Select a vehicle first.");
       return;
     }
     setActiveVehId(id);
+    activeVehRef.current = id;
     setIsCapturing(true);
     setCount(0);
+    frameCounterRef.current = 0;
     jsonlRef.current = [];
     // Keep CSV header; reset to only header row
     csvRef.current = [csvRef.current[0]];
@@ -203,9 +210,30 @@ export default function useFrameCapture({
       timerRef.current = null;
     }
     setIsCapturing(false);
+    activeVehRef.current = null;
   }, []);
 
   const exportZip = useCallback(async () => {
+    // If no frames captured yet, fetch a single latest frame for all known vehicles as a fallback
+    if (imagesRef.current.length === 0 && telemetrySource) {
+      const vehIds = Object.keys(telemetrySource)
+        .map((k) => Number(k))
+        .filter((n) => !Number.isNaN(n));
+      for (const vid of vehIds) {
+        try {
+          const url = fetchFrameUrl?.(vid);
+          if (!url) continue;
+          const resp = await fetch(url, { cache: "no-cache" });
+          if (!resp.ok) continue;
+          const blob = await resp.blob();
+          const fname = `images/frame_${String(imagesRef.current.length).padStart(6, "0")}.jpg`;
+          imagesRef.current.push({ filename: fname, blob });
+        } catch (e) {
+          // ignore individual failures; continue
+        }
+      }
+    }
+
     // Build a ZIP with /images, telemetry.jsonl, telemetry.csv, and meta.json
     const zip = new JSZip();
 

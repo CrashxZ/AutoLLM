@@ -164,6 +164,13 @@ class IntentMessage(BaseModel):
     tier: Optional[str] = None
     goal: Optional[str] = None
 
+class IntentLogEntry(BaseModel):
+    ts: float
+    veh_id: int
+    source: str
+    intent: Dict[str, Any]
+    telemetry: Optional[Dict[str, Any]] = None
+
 class MecReviewPayload(BaseModel):
     veh_id: int
     plan: Dict[str, Any] = Field(default_factory=dict)
@@ -171,6 +178,7 @@ class MecReviewPayload(BaseModel):
     request: Optional[Dict[str, Any]] = None
     context: Dict[str, Any] = Field(default_factory=dict)
     top_frame_b64: Optional[str] = None
+    goal: Optional[str] = None
 
 class MecConfig(BaseModel):
     safety_posture: Literal["strict", "balanced", "relaxed"]
@@ -213,6 +221,9 @@ class Session:
         self.spawn_points: List[carla.Transform] = []
         self.session_dir: Optional[str] = None
         self.telemetry_jsonl: Optional[io.TextIOWrapper] = None
+        self.mec_log: Optional[io.TextIOWrapper] = None
+        self.vehicle_logs: Dict[int, io.TextIOWrapper] = {}
+        self.last_intents: Dict[int, dict] = {}
 
         self.running: bool = False
         self.tick_thread: Optional[threading.Thread] = None
@@ -240,6 +251,7 @@ class Session:
         os.makedirs(os.path.join(root, "frames_front"), exist_ok=True)
         os.makedirs(os.path.join(root, "frames_top"), exist_ok=True)
         os.makedirs(os.path.join(root, "frames_global"), exist_ok=True)
+        os.makedirs(os.path.join(root, "vehicular"), exist_ok=True)
         return root
 
     def open_log(self):
@@ -247,6 +259,8 @@ class Session:
             self.session_dir = self._make_session_dir()
         path = os.path.join(self.session_dir, "telemetry.jsonl")
         self.telemetry_jsonl = open(path, "a", buffering=1, encoding="utf-8")
+        mec_path = os.path.join(self.session_dir, "mec_reviews.jsonl")
+        self.mec_log = open(mec_path, "a", buffering=1, encoding="utf-8")
 
     def close_log(self):
         if self.telemetry_jsonl:
@@ -255,6 +269,18 @@ class Session:
             except Exception:
                 pass
         self.telemetry_jsonl = None
+        if self.mec_log:
+            try:
+                self.mec_log.close()
+            except Exception:
+                pass
+        self.mec_log = None
+        for fp in list(self.vehicle_logs.values()):
+            try:
+                fp.close()
+            except Exception:
+                pass
+        self.vehicle_logs = {}
 
 SESSION = Session()
 MEC = MECController()
@@ -372,6 +398,9 @@ def telemetry_snapshot() -> dict:
             # lane change state (FSM)
             lc = vctx.lane_ctl.get_public_state()
 
+            last_intent = SESSION.last_intents.get(vid)
+            frame_idx = SESSION.buffers.top_counter.get(vid)
+
             out[str(vid)] = {
                 "ts": now,
                 "veh_id": vid,
@@ -384,6 +413,8 @@ def telemetry_snapshot() -> dict:
                 "distance_to_center": d2c,
                 "goal_distance": None,  # optional: compute from final route waypoint
                 "lane_change": lc,      # {"state":"IDLE/ARMING/EXECUTING/SETTLING/DONE/ABORT","direction": "left/right/none"}
+                "intent": last_intent,
+                "frame_top_file": f"veh_{vid}_top_{frame_idx:06d}.jpg" if frame_idx is not None else None,
             }
         except Exception:
             continue
@@ -430,6 +461,58 @@ def log_telemetry(json_obj: dict):
         SESSION.telemetry_jsonl.write(json.dumps(json_obj, separators=(",", ":")) + "\n")
     except Exception as e:
         print("[WARN] telemetry write failed:", e)
+
+def log_intent(entry: Dict[str, Any]):
+    """Append intent/plan JSON object to session JSONL."""
+    if not SESSION.telemetry_jsonl:
+        return
+    try:
+        SESSION.telemetry_jsonl.write(json.dumps(entry, separators=(",", ":")) + "\n")
+    except Exception as e:
+        print("[WARN] intent write failed:", e)
+
+
+def log_mec(entry: Dict[str, Any]):
+    if not SESSION.mec_log:
+        return
+    try:
+        SESSION.mec_log.write(json.dumps(entry, separators=(",", ":")) + "\n")
+    except Exception as e:
+        print("[WARN] mec write failed:", e)
+
+
+def log_vehicle(entry: Dict[str, Any]):
+    vid = entry.get("veh_id")
+    if vid is None:
+        return
+    if vid not in SESSION.vehicle_logs:
+        try:
+            path = os.path.join(SESSION.session_dir or "", "vehicular", f"{vid}.jsonl")
+            SESSION.vehicle_logs[vid] = open(path, "a", buffering=1, encoding="utf-8")
+        except Exception as e:
+            print("[WARN] vehicle log open failed:", e)
+            return
+    try:
+        SESSION.vehicle_logs[vid].write(json.dumps(entry, separators=(",", ":")) + "\n")
+    except Exception as e:
+        print("[WARN] vehicle log write failed:", e)
+
+
+def sanitize_intent_request(intent: dict | None, veh_id: int) -> dict | None:
+    if not intent:
+        return intent
+    req = intent.get("request") or {}
+    to_list = req.get("to")
+    if isinstance(to_list, list):
+        filtered = [str(x) for x in to_list if str(x) != str(veh_id)]
+    else:
+        filtered = []
+    if filtered:
+        req["to"] = filtered
+    else:
+        req = {"to": [], "ask": "none"}
+    intent = {**intent, "request": req}
+    return intent
 
 # ---- Camera callbacks & JPEG helpers ----------------------------------------
 
@@ -518,12 +601,29 @@ def spawn_global_cam(bp: carla.BlueprintLibrary, world: carla.World, center: Opt
     cam_bp.set_attribute("image_size_x", str(GLOBAL_RES[0]))
     cam_bp.set_attribute("image_size_y", str(GLOBAL_RES[1]))
     cam_bp.set_attribute("fov", str(GLOBAL_CAM_FOV))
+
+    # Derive center/height from spawn points to cover more of the map
+    spawns = SESSION.spawn_points or world.get_map().get_spawn_points()
+    if spawns:
+        xs = [sp.location.x for sp in spawns]
+        ys = [sp.location.y for sp in spawns]
+        min_x, max_x = min(xs), max(xs)
+        min_y, max_y = min(ys), max(ys)
+        cx, cy = (min_x + max_x) / 2.0, (min_y + max_y) / 2.0
+        span_x = max_x - min_x
+        span_y = max_y - min_y
+        fov_rad = math.radians(GLOBAL_CAM_FOV)
+        # height so that visible width ~= max(span_x, span_y)
+        height = max(span_x, span_y) / (2.0 * math.tan(max(fov_rad, 0.1) / 2.0)) + 20.0
+        height = max(height, 120.0)
+        if center is None:
+            center = carla.Location(x=cx, y=cy, z=0.0)
     if center is None:
-        # pick middle of first spawn as rough center
-        sp0 = SESSION.spawn_points[0] if SESSION.spawn_points else world.get_map().get_spawn_points()[0]
+        sp0 = spawns[0] if spawns else world.get_map().get_spawn_points()[0]
         center = sp0.location
+        height = GLOBAL_CAM_HEIGHT
     tr = carla.Transform(
-        carla.Location(x=center.x, y=center.y, z=center.z + GLOBAL_CAM_HEIGHT),
+        carla.Location(x=center.x, y=center.y, z=center.z + height),
         carla.Rotation(pitch=-90.0)
     )
     cam = world.spawn_actor(cam_bp, tr)
@@ -771,14 +871,6 @@ def global_cam_callback(image):
             SESSION.buffers.global_last_jpeg = jpg
             SESSION.buffers.global_counter += 1
 
-        if SESSION.session_dir:
-            try:
-                out = os.path.join(SESSION.session_dir, "frames_global", f"global_{SESSION.buffers.global_counter:06d}.jpg")
-                with open(out, "wb") as f:
-                    f.write(jpg)
-            except Exception as e:
-                print(f"[GLOBAL] persist fail: {e}")
-
     except Exception as e:
         print(f"[GLOBAL] callback error: {e}")
 
@@ -913,6 +1005,20 @@ def handle_command(cmd: dict):
     elif c == "intent":
         # For now, global always approves. We turn intent into an action.
         intent = cmd.get("intent") or {}
+        intent = sanitize_intent_request(intent, vid)
+        try:
+            SESSION.last_intents[vid] = intent
+            entry = {
+                "ts": time.time(),
+                "veh_id": vid,
+                "source": "vehicle_intent",
+                "intent": intent,
+                "telemetry": telemetry_snapshot().get(str(vid)),
+            }
+            log_intent(entry)
+            log_vehicle(entry)
+        except Exception:
+            pass
         # simple mapping
         act = (intent.get("ego_action") or intent.get("action") or "keep").lower()
         if "left" in act:
@@ -957,6 +1063,20 @@ def health():
 async def mec_review(payload: MecReviewPayload):
     telemetry = telemetry_snapshot()
     result = await MEC.review(payload, telemetry)
+    try:
+        entry = {
+            "ts": time.time(),
+            "veh_id": payload.veh_id,
+            "source": "mec",
+            "intent": result,
+            "telemetry": telemetry.get(str(payload.veh_id)),
+            "goal": payload.goal or payload.context.get("goal"),
+        }
+        log_intent(entry)
+        log_mec(entry)
+        log_vehicle(entry)
+    except Exception:
+        pass
     broadcast_ws_json({"type": "mec_decision", **result})
     return result
 
@@ -1340,8 +1460,17 @@ def frame_front(veh_id: int):
 def frame_top(veh_id: int):
     with SESSION.buffers.lock:
         jpg = SESSION.buffers.top_last_jpeg.get(veh_id)
+        SESSION.buffers.top_counter[veh_id] = SESSION.buffers.top_counter.get(veh_id, 0) + 1
     if not jpg:
         raise HTTPException(404, "no frame yet")
+    fname = f"veh_{veh_id}_top_{SESSION.buffers.top_counter.get(veh_id,0):06d}.jpg"
+    try:
+        if SESSION.session_dir:
+            path = os.path.join(SESSION.session_dir, "frames_top", fname)
+            with open(path, "wb") as fh:
+                fh.write(jpg)
+    except Exception:
+        pass
     return Response(content=jpg, media_type="image/jpeg")
 
 @app.get("/frame/global.jpg")

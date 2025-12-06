@@ -101,14 +101,14 @@ class MECController:
           ),
         },
       ],
-      "temperature": 0.2,
-      "max_tokens": 500,
+      "response_format": {"type": "json_object"},
+      "max_completion_tokens": 500,
     }
 
     try:
       async with httpx.AsyncClient(timeout=30) as client:
         resp = await client.post(
-          "https://api.openai.com/v1/chat/completions",
+          "https://api.openai.com/v1/chat/completions", #chat/completions
           headers={
             "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json",
@@ -162,8 +162,9 @@ class MECController:
       f"{posture_clause}\n"
       f"Proposed plan:\n{plan_txt}\n"
       f"Intent/request payload: {req_txt}\n\n"
-      f"Fleet telemetry snapshot:\n{vehicles_txt}\n"
-      "Decide if this plan keeps all vehicles safe. "
+      f"Fleet telemetry snapshot (only these vehicles exist):\n{vehicles_txt}\n"
+      "Decide if this plan keeps all vehicles safe based ONLY on the provided telemetry/image. "
+      "If no nearby vehicle is shown, assume lane is clear and approve. "
       "If unsafe, supply a safer multi-step plan."
     )
 
@@ -188,7 +189,7 @@ class MECController:
 
   def _format_telemetry(self, telemetry_snapshot: Dict[str, Any], highlight: int) -> str:
     entries = []
-    for key, data in list(telemetry_snapshot.items())[:12]:
+    for key, data in list(telemetry_snapshot.items())[:8]:
       veh_id = data.get("veh_id") or int(key)
       prefix = "*" if veh_id == highlight else "-"
       entries.append(

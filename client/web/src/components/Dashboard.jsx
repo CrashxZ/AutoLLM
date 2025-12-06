@@ -47,6 +47,22 @@ function DashboardTabs({ active, onChange }) {
   );
 }
 
+const VideoStream = React.memo(function VideoStream({ streamUrl, view, onFrameLoad }) {
+  if (!streamUrl) {
+    return <div className="text-gray-500">Select a vehicle to view video.</div>;
+  }
+  return (
+    <img
+      src={streamUrl}
+      alt={view}
+      key={view + streamUrl}
+      className="max-h-full max-w-full object-contain"
+      onLoad={onFrameLoad}
+      crossOrigin="anonymous"
+    />
+  );
+});
+
 export default function Dashboard() {
   // ---- WebSocket / Telemetry ----
   const { telemetry, vehicles, status, sendCommand } = useWebSocket({ url: WS_URL });
@@ -228,16 +244,7 @@ export default function Dashboard() {
             </div>
             {/* Stream */}
             <div className="flex-1 flex items-center justify-center bg-black">
-              {streamUrl ? (
-                <img
-                  src={streamUrl}
-                  alt={view}
-                  className="max-h-full max-w-full object-contain"
-                  onLoad={onFrameLoad}
-                />
-              ) : (
-                <div className="text-gray-500">Select a vehicle to view video.</div>
-              )}
+              <VideoStream streamUrl={streamUrl} view={view} onFrameLoad={onFrameLoad} />
             </div>
             {/* Telemetry */}
             <TelemetryPanel telemetry={telemetry} selectedVehId={selectedVehicle} />

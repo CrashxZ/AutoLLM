@@ -3,6 +3,7 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 
 const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:8000";
 const OPENAI_API_KEY = import.meta.env.VITE_OPENAI_API_KEY || "";
+const OPENAI_MODEL = import.meta.env.VITE_OPENAI_MODEL || "gpt-4o-mini";
 const SPEED_TOLERANCE_KMH = 2.5;
 const STEP_RESEND_INTERVAL_MS = 3000;
 const STEP_MAX_RUNTIME_MS = 25000;
@@ -848,13 +849,11 @@ function blobToBase64(blob) {
 
 async function callOpenAIForIntent(apiKey, ctx, topB64) {
   const sys = [
-    "You are the Vehicular Agent for an autonomous car inside a CARLA-like simulator.",
-    "Given a high-level goal plus the current speed_kmh, lane_id and an optional overhead frame,",
-    "produce a SHORT multi-step driving plan (max 4 steps) needed to satisfy the goal.",
-    'Allowed step actions: "lane_left","lane_right","set_speed","speed_up","speed_down","hold".',
-    "Each step must include a description plus target_lane_id or target_speed_kmh when relevant.",
-    "Respond ONLY as minified JSON with fields:",
-    '{ "ego_veh_id": number, "plan_summary": string, "plan_steps": [{ "id": "step-1", "description": "...", "action": "lane_left", "target_lane_id": number|null, "target_speed_kmh": number|null }], "ego_action": string, "reason": string, "confidence": number, "request": { "to": string[], "ask": string } }',
+    "Vehicular agent: output only compact JSON for one car.",
+    "Use at most 3 steps to satisfy the goal.",
+    'Allowed actions: "lane_left","lane_right","set_speed","speed_up","speed_down","hold","brake".',
+    'If another vehicle blocks or is too close, include a request (to ["veh_id"| "unknown"]) such as "slow down" or "yield".',
+    'JSON shape: {"ego_veh_id":n,"plan_summary":"...","plan_steps":[{"id":"s1","description":"...","action":"lane_left","target_lane_id":-1,"target_speed_kmh":40}], "ego_action":"lane left","reason":"...","confidence":0.6,"request":{"to":["150"],"ask":"slow down"}}',
   ].join(" ");
 
   const useImage = Boolean(topB64);
@@ -872,18 +871,18 @@ async function callOpenAIForIntent(apiKey, ctx, topB64) {
   }
 
   const body = {
-    model: "gpt-4o-mini",
+    model: OPENAI_MODEL,
     messages: [
       { role: "system", content: sys },
       { role: "user", content: userContent },
       {
         role: "user",
         content:
-          'Respond with ONLY valid minified JSON. Example: {"ego_veh_id":101,"plan_summary":"Change lane then speed up","plan_steps":[{"id":"step-1","description":"Move to left lane","action":"lane_left","target_lane_id":-2},{"id":"step-2","description":"Accelerate to 40 km/h","action":"set_speed","target_speed_kmh":40}],"ego_action":"lane left","reason":"clear faster lane","confidence":0.78,"request":{"to":[],"ask":"none"}}',
+          'Respond with ONLY minified JSON. Example: {"ego_veh_id":101,"plan_summary":"Shift left and match flow","plan_steps":[{"id":"s1","description":"Move left to faster lane","action":"lane_left","target_lane_id":-2},{"id":"s2","description":"Hold 45 km/h","action":"set_speed","target_speed_kmh":45}],"ego_action":"lane left","reason":"avoid slow traffic","confidence":0.78,"request":{"to":["150"],"ask":"slow down"}}',
       },
     ],
-    temperature: 0.2,
-    max_tokens: 400,
+    response_format: { type: "json_object" },
+    max_completion_tokens: 220,
   };
 
   const resp = await fetch("https://api.openai.com/v1/chat/completions", {
@@ -975,7 +974,7 @@ async function requestMecApproval({ vehId, plan, ctx, intent, topFrameB64, telem
   return data;
 }
 
-function buildTelemetrySummary(telemetry, limit = 10) {
+function buildTelemetrySummary(telemetry, limit = 5) {
   if (!telemetry) return [];
   const values = Object.values(telemetry)
     .filter(Boolean)

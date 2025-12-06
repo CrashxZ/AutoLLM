@@ -125,7 +125,7 @@ function ruleBasedAgent(observation, goal) {
 
 /* ---------------------------- OpenAI agent ----------------------------- */
 
-async function openAiAgent(observation, goal, apiKey, model = "gpt-4o-mini") {
+async function openAiAgent(observation, goal, apiKey, model = "gpt-4.1-nano") {
   const messages = [
     {
       role: "user",
@@ -201,7 +201,7 @@ Return STRICT JSON:
  * @returns {Promise<{ intention: string, action: { speed_kmh:number, lane_cmd:string, brake:boolean } }>}
  */
 export async function proposeAction(observation, goal, config = {}) {
-  const { useLLM = false, apiKey = null, model = "gpt-4o-mini" } = config;
+  const { useLLM = false, apiKey = null, model = "gpt-4.1-nano" } = config;
 
   if (!useLLM || !apiKey) {
     const out = ruleBasedAgent(observation, goal);
