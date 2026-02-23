@@ -90,6 +90,7 @@ Vite defaults to `http://localhost:5173`, proxying API/WebSocket calls to the ba
   - `telemetry.jsonl`: per-tick telemetry for all vehicles (`vehicles` map keyed by veh_id) with the last known `intent` per vehicle.
   - `mec_reviews.jsonl`: MEC decisions `{ts, veh_id, source:"mec", intent:<decision>, telemetry:<veh snapshot>, goal}`.
   - `vehicular/<veh_id>.jsonl`: per-vehicle logs `{ts, veh_id, source:"vehicle_intent"|"mec", intent, telemetry, goal}`.
+  - Traffic Manager collision behaviour can be toggled via `POST /tm/unsafe` with `{"unsafe":true|false}`; `GET /tm/unsafe` reports the current mode. Unsafe mode leaves TM pathing intact but disables avoidance so collisions can occur.
 
 ---
 

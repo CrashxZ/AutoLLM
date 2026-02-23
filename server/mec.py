@@ -157,14 +157,16 @@ class MECController:
     posture_clause = (
       f"Safety posture: {self.safety_posture.upper()} - {SAFETY_OPTIONS[self.safety_posture]}"
     )
+    flow_clause = "Traffic flow target: 50 km/h average. Maintain this unless safety requires otherwise."
     return (
       f"MEC evaluation request:\nVehicle: {veh}\nGoal: {goal}\n"
       f"{posture_clause}\n"
+      f"{flow_clause}\n"
       f"Proposed plan:\n{plan_txt}\n"
       f"Intent/request payload: {req_txt}\n\n"
       f"Fleet telemetry snapshot (only these vehicles exist):\n{vehicles_txt}\n"
       "Decide if this plan keeps all vehicles safe based ONLY on the provided telemetry/image. "
-      "If no nearby vehicle is shown, assume lane is clear and approve. "
+      "If the provided image/telemetry shows no nearby vehicles around the ego car, approve all actions. "
       "If unsafe, supply a safer multi-step plan."
     )
 

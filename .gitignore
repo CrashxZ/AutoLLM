@@ -1,4 +1,5 @@
 client/web/node_modules/
 data/
+paper/
 .env
 client/web/.env

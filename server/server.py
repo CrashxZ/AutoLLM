@@ -92,6 +92,7 @@ CARLA_HOST = os.environ.get("CARLA_HOST", "127.0.0.1")
 CARLA_PORT = int(os.environ.get("CARLA_PORT", "2000"))
 CARLA_TIMEOUT = float(os.environ.get("CARLA_TIMEOUT", "10.0"))
 CARLA_DIR = os.environ.get("CARLA_DIR", "/home/labsdr/carla_simulator")  # optional: override if needed
+TM_SAFE_DISTANCE = float(os.environ.get("TM_SAFE_DISTANCE", "3.0"))
 
 def _try_import_carla():
     if CARLA_DIR:
@@ -183,6 +184,9 @@ class MecReviewPayload(BaseModel):
 class MecConfig(BaseModel):
     safety_posture: Literal["strict", "balanced", "relaxed"]
 
+class UnsafeToggle(BaseModel):
+    unsafe: bool
+
 # ---- Session state -----------------------------------------------------------
 
 class CameraBuffers:
@@ -242,6 +246,9 @@ class Session:
 
         # internal queues
         self.cmd_queue: "queue.Queue[dict]" = queue.Queue()
+
+        # traffic manager safety mode
+        self.tm_unsafe_mode: bool = False
 
     # --- util paths ---
     def _make_session_dir(self) -> str:
@@ -303,7 +310,7 @@ def carla_connect():
     tm.set_synchronous_mode(True)
     tm.set_respawn_dormant_vehicles(True)
     tm.set_random_device_seed(42)
-    tm.set_global_distance_to_leading_vehicle(3.0)
+    tm.set_global_distance_to_leading_vehicle(TM_SAFE_DISTANCE)
 
     bp = world.get_blueprint_library()
     spectator = world.get_spectator()
@@ -513,6 +520,33 @@ def sanitize_intent_request(intent: dict | None, veh_id: int) -> dict | None:
         req = {"to": [], "ask": "none"}
     intent = {**intent, "request": req}
     return intent
+
+def apply_tm_collision_mode(unsafe: bool):
+    """Apply Traffic Manager collision/avoidance settings across all vehicles."""
+    tm = SESSION.tm
+    if not tm:
+        return
+    vehicles = [vctx.veh for vctx in SESSION.vehicles.values()]
+    ignore_pct = 100.0 if unsafe else 0.0
+    try:
+        tm.set_global_distance_to_leading_vehicle(0.0 if unsafe else TM_SAFE_DISTANCE)
+    except Exception:
+        pass
+    for veh in vehicles:
+        try:
+            tm.set_percentage_ignore_vehicles(veh, ignore_pct)
+            tm.set_percentage_ignore_walkers(veh, ignore_pct)
+            tm.set_distance_to_leading_vehicle(veh, 0.0 if unsafe else TM_SAFE_DISTANCE)
+        except Exception:
+            pass
+    # Pairwise collision detection toggle (small fleet -> OK to do O(n^2))
+    for i, va in enumerate(vehicles):
+        for vb in vehicles[i + 1:]:
+            try:
+                tm.set_collision_detection(va, vb, not unsafe)
+                tm.set_collision_detection(vb, va, not unsafe)
+            except Exception:
+                pass
 
 # ---- Camera callbacks & JPEG helpers ----------------------------------------
 
@@ -997,6 +1031,11 @@ def handle_command(cmd: dict):
         vctx.lane_ctl.request_change("right")
 
     elif c == "brake":
+        # Stop TM control so manual brake persists
+        try:
+            veh.set_autopilot(False)
+        except Exception:
+            pass
         veh.apply_control(carla.VehicleControl(throttle=0.0, brake=1.0, steer=0.0))
 
     elif c == "release":
@@ -1097,6 +1136,16 @@ def update_mec_config(cfg: MecConfig):
     updated = MEC.get_safety_posture()
     return {"safety_posture": updated}
 
+@app.get("/tm/unsafe")
+def get_tm_unsafe():
+    return {"unsafe_mode": SESSION.tm_unsafe_mode}
+
+@app.post("/tm/unsafe")
+def set_tm_unsafe(cfg: UnsafeToggle):
+    SESSION.tm_unsafe_mode = bool(cfg.unsafe)
+    apply_tm_collision_mode(SESSION.tm_unsafe_mode)
+    return {"unsafe_mode": SESSION.tm_unsafe_mode}
+
 @app.get("/spawns")
 def list_spawns():
     carla_connect()
@@ -1175,6 +1224,9 @@ def configure(cfg: ConfigRequest):
         SESSION.vehicles[veh.id] = vctx
         veh_ids.append(veh.id)
 
+    # Apply current TM safety mode to all vehicles (safe vs. unsafe)
+    apply_tm_collision_mode(SESSION.tm_unsafe_mode)
+
     # global cam
     if SESSION.global_cam:
         safe_destroy([SESSION.global_cam])
@@ -1230,6 +1282,10 @@ def reset_internal(destroy_only: bool):
         SESSION.buffers.front_counter.clear()
         SESSION.buffers.top_counter.clear()
         SESSION.buffers.global_counter = 0
+
+    # restore TM safety defaults
+    SESSION.tm_unsafe_mode = False
+    apply_tm_collision_mode(False)
 
     if not destroy_only:
         SESSION.close_log()

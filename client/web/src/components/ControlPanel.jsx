@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 
+const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:8000";
+
 /**
  * ControlPanel (Sketch-aligned)
  * -----------------------------
@@ -27,6 +29,9 @@ export default function ControlPanel({
   onModeChange = () => {},
   sendCommand = () => {},
 }) {
+  const [tmUnsafe, setTmUnsafe] = useState(false);
+  const [tmLoading, setTmLoading] = useState(false);
+
   // keep control_mode persisted (as you already do elsewhere)
   useEffect(() => {
     localStorage.setItem("control_mode", mode);
@@ -42,6 +47,20 @@ export default function ControlPanel({
       setSelectedVehicle(vehicles[0]);
     }
   }, [vehicles]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`${API_BASE}/tm/unsafe`)
+      .then((resp) => (resp.ok ? resp.json() : null))
+      .then((data) => {
+        if (cancelled || !data) return;
+        setTmUnsafe(Boolean(data.unsafe_mode));
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const disabledNoVeh = useMemo(
     () => !vehicles?.length || selectedVehicle == null,
@@ -67,6 +86,25 @@ export default function ControlPanel({
     // keep it simple for now; later you’ll open the AI panel
     onModeChange("LLM_LOCAL"); // or "LLM_API" later
     sendCommand({ cmd: "mode", control_mode: "LLM" });
+  };
+
+  const toggleTmUnsafe = async () => {
+    const next = !tmUnsafe;
+    setTmLoading(true);
+    try {
+      const resp = await fetch(`${API_BASE}/tm/unsafe`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ unsafe: next }),
+      });
+      if (!resp.ok) throw new Error(`TM unsafe ${resp.status}`);
+      const data = await resp.json();
+      setTmUnsafe(Boolean(data.unsafe_mode));
+    } catch (err) {
+      console.error("Failed to toggle TM unsafe mode:", err);
+    } finally {
+      setTmLoading(false);
+    }
   };
 
   return (
@@ -174,6 +212,17 @@ export default function ControlPanel({
           AI
         </button>
       </div>
+
+      {/* TM unsafe toggle */}
+      <button
+        onClick={toggleTmUnsafe}
+        disabled={tmLoading}
+        className={`py-2 rounded text-sm font-semibold ${
+          tmUnsafe ? "bg-red-600 hover:bg-red-700" : "bg-gray-700 hover:bg-gray-600"
+        } ${tmLoading ? "opacity-60 cursor-wait" : ""}`}
+      >
+        {tmUnsafe ? "TM Unsafe: ON" : "TM Unsafe: OFF"}
+      </button>
 
       {/* (Future) AI Control Panel placeholder */}
       <div className="mt-2 border border-dashed border-gray-700 rounded p-3 text-xs text-gray-400">
