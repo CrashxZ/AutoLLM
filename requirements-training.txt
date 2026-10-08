@@ -1,0 +1,3 @@
+-r requirements.txt
+# MAPPO training uses PyTorch; inference uses the supplied NumPy actor.
+torch>=2.2

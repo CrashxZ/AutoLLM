@@ -1,0 +1,11 @@
+{
+  "accepted": true,
+  "all_cells_in_selected_validation": true,
+  "deterministic_validation_replay": true,
+  "portable_actor_matches": true,
+  "portable_actor_max_logit_error": 1.7881393432617188e-07,
+  "split_geometry_hashes_disjoint": true,
+  "split_seed_namespaces_disjoint": true,
+  "within_rss_budget": true,
+  "within_wall_budget": true
+}

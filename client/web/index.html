@@ -1,0 +1,34 @@
+<!-- client/web/index.html -->
+<!DOCTYPE html>
+<html lang="en" class="bg-gray-900 text-white">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0"
+    />
+    <meta name="theme-color" content="#111827" />
+    <meta name="description" content="CARLA AI-in-the-Loop Web Dashboard" />
+    <meta property="og:title" content="CARLA AI-in-the-Loop Dashboard" />
+    <meta
+      property="og:description"
+      content="Interactive CARLA simulation client with LLM-in-the-loop control."
+    />
+    <meta property="og:type" content="website" />
+    <title>CARLA AI-in-the-Loop</title>
+    <link rel="icon" href="/favicon.ico" />
+  </head>
+
+  <body class="min-h-screen bg-gray-900 text-white overflow-hidden">
+    <div id="root"></div>
+
+    <noscript>
+      <p class="text-center mt-10 text-red-400">
+        JavaScript is required to run this application.
+      </p>
+    </noscript>
+
+    <!-- Vite entry -->
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>

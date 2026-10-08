@@ -1,0 +1,9 @@
+{
+  "cell_coverage": 9,
+  "collision_rate": 0.037037037037037035,
+  "episodes": 27,
+  "gap_episode_rate": 0.4444444444444444,
+  "mean_steps": 39.370370370370374,
+  "mean_validator_interventions": 208.88888888888889,
+  "success_rate": 0.5555555555555556
+}

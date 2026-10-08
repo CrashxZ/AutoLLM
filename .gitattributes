@@ -1,0 +1,2 @@
+# Preserve reference CSV bytes while recognizing CRLF line endings.
+*.csv whitespace=cr-at-eol

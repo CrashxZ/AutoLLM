@@ -1,0 +1,108 @@
+{
+  "acceptance": {
+    "accepted": true,
+    "all_cells_in_selected_validation": true,
+    "deterministic_validation_replay": true,
+    "portable_actor_matches": true,
+    "portable_actor_max_logit_error": 1.7881393432617188e-07,
+    "split_geometry_hashes_disjoint": true,
+    "split_seed_namespaces_disjoint": true,
+    "within_rss_budget": true,
+    "within_wall_budget": true
+  },
+  "algorithm": "parameter-sharing validator-masked MAPPO",
+  "arguments": {
+    "clip_ratio": 0.2,
+    "device": "cpu",
+    "entropy_coef": 0.02,
+    "epochs": 2,
+    "eval_every": 5,
+    "gae_lambda": 0.95,
+    "gamma": 0.99,
+    "learning_rate": 0.0001,
+    "max_grad_norm": 0.5,
+    "max_rss_mb": 4096.0,
+    "max_wall_s": 600.0,
+    "min_entropy_coef": 0.001,
+    "minibatch_size": 512,
+    "model_seed": 2026082601,
+    "num_envs": 18,
+    "overwrite": false,
+    "rollout_steps": 32,
+    "run_dir": "data/experiments/carla_aligned_mappo_candidate_20260916",
+    "scenario_profile": "carla_aligned",
+    "skip_test": true,
+    "test_episodes_per_cell": 2,
+    "updates": 15,
+    "validation_episodes_per_cell": 3,
+    "value_coef": 0.5
+  },
+  "claim_status": "training feasibility",
+  "comparison_label": "MAPPO_ADAPTED",
+  "consumed_training_scenarios": 225,
+  "cooperative_support_actions": true,
+  "core_cells": [
+    {
+      "family": "close_reciprocal",
+      "fleet_size": 2
+    },
+    {
+      "family": "close_reciprocal",
+      "fleet_size": 4
+    },
+    {
+      "family": "close_reciprocal",
+      "fleet_size": 8
+    },
+    {
+      "family": "contested_merge",
+      "fleet_size": 2
+    },
+    {
+      "family": "contested_merge",
+      "fleet_size": 4
+    },
+    {
+      "family": "contested_merge",
+      "fleet_size": 8
+    },
+    {
+      "family": "blocked_merge",
+      "fleet_size": 2
+    },
+    {
+      "family": "blocked_merge",
+      "fleet_size": 4
+    },
+    {
+      "family": "blocked_merge",
+      "fleet_size": 8
+    }
+  ],
+  "elapsed_s": 106.89828372001648,
+  "environment": {
+    "git_revision": "67e66d6b6cb55edd631d3fdd2575b9463fee39ca",
+    "numpy": "2.2.6",
+    "platform": "Linux-6.8.0-138-generic-x86_64-with-glibc2.35",
+    "python": "3.10.12",
+    "torch": "2.13.0+cpu"
+  },
+  "model_seed": 2026082601,
+  "peak_rss_mb": 314.328125,
+  "priority_observation": true,
+  "scenario_profile": "carla_aligned",
+  "selected_update": 15,
+  "selection_score": 0.29555555555555557,
+  "split_seed_namespaces_disjoint": true,
+  "status": "complete",
+  "test": null,
+  "validation": {
+    "cell_coverage": 9,
+    "collision_rate": 0.037037037037037035,
+    "episodes": 27,
+    "gap_episode_rate": 0.4444444444444444,
+    "mean_steps": 39.370370370370374,
+    "mean_validator_interventions": 208.88888888888889,
+    "success_rate": 0.5555555555555556
+  }
+}

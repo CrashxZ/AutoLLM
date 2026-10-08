@@ -1,0 +1,487 @@
+[
+  {
+    "path": "marl/__init__.py",
+    "source": "marl/__init__.py",
+    "sha256": "7b3f1310a6c7f69b65f541107bf923a1bb570f03925f693428558394034ba8a2"
+  },
+  {
+    "path": "marl/adapted_mappo_scenarios.py",
+    "source": "marl/adapted_mappo_scenarios.py",
+    "sha256": "a8cafefa87723df23bc60178cf1d009f113051d6092e3221a56c247fbd20e374"
+  },
+  {
+    "path": "marl/benchmark_v2_policies.py",
+    "source": "marl/benchmark_v2_policies.py",
+    "sha256": "85ccecbe9902c69d12e78eecb2850605dc90cd0d8ef5a13bb179741ebc5b76fd"
+  },
+  {
+    "path": "marl/carla_aligned_mappo.py",
+    "source": "marl/carla_aligned_mappo.py",
+    "sha256": "572b05cbde75dfdd2385128feac64ee47616373b524cbb6a25c40e60b258ce45"
+  },
+  {
+    "path": "marl/coordination_channel.py",
+    "source": "marl/coordination_channel.py",
+    "sha256": "541f680811ec36f2a523e04f57d1b50bfd55e5b78a1e055ccda9e7c744ee5220"
+  },
+  {
+    "path": "marl/fcfs_policy.py",
+    "source": "marl/fcfs_policy.py",
+    "sha256": "57670c12c9425c5e40bc09230f1a19df68d220e555ed75f8e8d9acfeed342b30"
+  },
+  {
+    "path": "marl/fleet_fcfs_policy.py",
+    "source": "marl/fleet_fcfs_policy.py",
+    "sha256": "7d3d65e7411e04863dd0e805d9f70bf8b095459e441679c18d8fd4ad9ef775e5"
+  },
+  {
+    "path": "marl/fleet_highway_env.py",
+    "source": "marl/fleet_highway_env.py",
+    "sha256": "11ec52dbfde5c385823310d56d767a823b38c08792caa2bd5659bba0dbc8bbdf"
+  },
+  {
+    "path": "marl/fleet_mappo.py",
+    "source": "marl/fleet_mappo.py",
+    "sha256": "726d5d1ade62aad913b75152040edd51b8e1ef0655890625df2d9266ef042c19"
+  },
+  {
+    "path": "marl/fleet_mappo_models.py",
+    "source": "marl/fleet_mappo_models.py",
+    "sha256": "dcea9520880e049125f2f6cc8cbc511d54276d7d6f35d7ab4c181fa7e282b263"
+  },
+  {
+    "path": "marl/highway_env.py",
+    "source": "marl/highway_env.py",
+    "sha256": "fbb60e846d4e70bf488e216ecbf7cd1a562845bc978c424115f0a1fb2bed3d73"
+  },
+  {
+    "path": "marl/multimodal_intent.py",
+    "source": "marl/multimodal_intent.py",
+    "sha256": "2ff2e273f40e2acfad6a3a7ba84c7db05531c0501fec70a550c69dbecffba3e4"
+  },
+  {
+    "path": "marl/multimodal_intent_model.py",
+    "source": "marl/multimodal_intent_model.py",
+    "sha256": "a58d3b31b047599fe8d7eb833ef028d2aacde4f2bf764a7aeaf04b142157ce3a"
+  },
+  {
+    "path": "marl/multimodal_intent_model_v4.py",
+    "source": "marl/multimodal_intent_model_v4.py",
+    "sha256": "c3dfc0e8529742c2aab92d6a2b79996cc7db17d59b5ae4749e13f7c621595dfe"
+  },
+  {
+    "path": "marl/multimodal_intent_runtime.py",
+    "source": "marl/multimodal_intent_runtime.py",
+    "sha256": "adc4aff884376f306fc71ea0a66e140aa66a422b02e3ffb19bd1129087a91c8a"
+  },
+  {
+    "path": "marl/numpy_policy.py",
+    "source": "marl/numpy_policy.py",
+    "sha256": "c1dd1691d2de5e538871c796e84f8951b568c043d3bf4d7e964b797bbf7f6491"
+  },
+  {
+    "path": "marl/procedural_mappo.py",
+    "source": "marl/procedural_mappo.py",
+    "sha256": "b62dcbfa6238ba0890f5e38f44d5130248d9a90159c54c9c618a3caab3f95ca4"
+  },
+  {
+    "path": "marl/procedural_scenarios.py",
+    "source": "marl/procedural_scenarios.py",
+    "sha256": "b3167bf5d27e2d35427421e81dd3cf7a96682a432d2dfa2c714b39fd09b62f15"
+  },
+  {
+    "path": "marl/stress_highway_env.py",
+    "source": "marl/stress_highway_env.py",
+    "sha256": "9a8afbfaaa6360fc9e22f38ed314b79da110c820f5069e3093bbe52d8e971a49"
+  },
+  {
+    "path": "scripts/analyze_carla_conflict_active_confirmatory.py",
+    "source": "scripts/analyze_carla_conflict_active_confirmatory.py",
+    "sha256": "115adfae9c4228247b0ebf443bf337875a49b038ded639800198d6b82a3641ed"
+  },
+  {
+    "path": "scripts/analyze_carla_paired_coordination.py",
+    "source": "scripts/analyze_carla_paired_coordination.py",
+    "sha256": "b25f2ec8ddc0fe1d31980031354837c8ada3c9de8029f05183414fb004ecb8e5"
+  },
+  {
+    "path": "scripts/benchmark_candidate_ranker_latency.py",
+    "source": "scripts/benchmark_candidate_ranker_latency.py",
+    "sha256": "47aee3820906aab0e2eb0269e2e7f75d83189e1a4feaa7626cd460ef863b550c"
+  },
+  {
+    "path": "scripts/calibrate_carla_lane_changes.py",
+    "source": "scripts/calibrate_carla_lane_changes.py",
+    "sha256": "daee592f93fa52abfd6a8fb98a4f68057839b7bd9dc3618fbfd3bab1eb973040"
+  },
+  {
+    "path": "scripts/carla_conflict_confirmatory_freeze.py",
+    "source": "scripts/carla_conflict_confirmatory_freeze.py",
+    "sha256": "61848c6b9f41230350d35525b39db05925c52185207b69d5a73559346d08e333"
+  },
+  {
+    "path": "scripts/carla_paired_freeze.py",
+    "source": "scripts/carla_paired_freeze.py",
+    "sha256": "9cb390f07f82a28f81c79b0ff480f02b881c1a471f5ec3ed7d0cad15c3a5a24c"
+  },
+  {
+    "path": "scripts/coordination_v2_freeze.py",
+    "source": "scripts/coordination_v2_freeze.py",
+    "sha256": "a674bb3ec0d3e1ede9891a77c3b38ce4cae16b47f7d49e833d466bef4e203bfb"
+  },
+  {
+    "path": "scripts/generate_candidate_ranker_dataset.py",
+    "source": "scripts/generate_candidate_ranker_dataset.py",
+    "sha256": "89419756b5bcf9ae2d05c72ecb5aa9d513e8710b22db266034fdaae0204f85ea"
+  },
+  {
+    "path": "scripts/plan_carla_conflict_confirmatory.py",
+    "source": "scripts/plan_carla_conflict_confirmatory.py",
+    "sha256": "3c84e2e29e2742086599ad3c0266bf73f3c89838c42f21c3c9ab3db181a340d6"
+  },
+  {
+    "path": "scripts/plan_carla_paired_comparison.py",
+    "source": "scripts/plan_carla_paired_comparison.py",
+    "sha256": "d0ff9829b5750bbf06027b93d98aed946517002ab50c7a2d9de3de0153797999"
+  },
+  {
+    "path": "scripts/run_carla_conflict_active_pilot.py",
+    "source": "scripts/run_carla_conflict_active_pilot.py",
+    "sha256": "d3ab6f7c2fb58a367a2881cfd0ea13d0e76a9cc19e2a6b7b86c59d055828a02d"
+  },
+  {
+    "path": "scripts/run_carla_guarded_transfer.py",
+    "source": "scripts/run_carla_guarded_transfer.py",
+    "sha256": "b2a2018c88d6b76e7cf6bc872f19a5a51bde5d24d3d82bde9466f8864d9062a4"
+  },
+  {
+    "path": "scripts/run_carla_multi_vehicle_executor.py",
+    "source": "scripts/run_carla_multi_vehicle_executor.py",
+    "sha256": "5a13d15b8b2733157d6a45ee7761ca538b19156815475388ebb7ae44e91e2ab4"
+  },
+  {
+    "path": "scripts/run_carla_paired_coordination.py",
+    "source": "scripts/run_carla_paired_coordination.py",
+    "sha256": "32759aa57fa009a57955bbc9d8b7b85ef3d27519b17727b71ad53d4fe5593970"
+  },
+  {
+    "path": "scripts/train_adapted_mappo.py",
+    "source": "scripts/train_adapted_mappo.py",
+    "sha256": "cb45ad7529a153ac507329397520c2a32beafef2eaec7c78f3a41cd7a8c6d89c"
+  },
+  {
+    "path": "scripts/train_candidate_ranker.py",
+    "source": "scripts/train_candidate_ranker.py",
+    "sha256": "eed03290619dc3d2f7ad620285a8b3c37cb20a224dd5ff0f03a25ee045effb8b"
+  },
+  {
+    "path": "scripts/train_fleet_mappo.py",
+    "source": "scripts/train_fleet_mappo.py",
+    "sha256": "2323d56c74d919628eac5eadc9f7547c103484a1c866ee1f1d20038d3a04ef1a"
+  },
+  {
+    "path": "server/__init__.py",
+    "source": "server/__init__.py",
+    "sha256": "001b0c0799439f2f1375c6f83b857af91812fe54d6b0abf9123db60b8f37ff0b"
+  },
+  {
+    "path": "server/coordination/__init__.py",
+    "source": "server/coordination/__init__.py",
+    "sha256": "6f9edebb6ed64e581203aed313fa2be4fed3597b8d641e5fd8b9670323c4cbe2"
+  },
+  {
+    "path": "server/coordination/audit.py",
+    "source": "server/coordination/audit.py",
+    "sha256": "7b4758f408ef236cca6ed31af8b55af446f2b79ec7372cea98eedf4ed07381e6"
+  },
+  {
+    "path": "server/coordination/candidate_prioritization.py",
+    "source": "server/coordination/candidate_prioritization.py",
+    "sha256": "5aa1d5ee3d01c17bf4a3f205004a6ab9b0299566f73b519dcd23b266bab979c0"
+  },
+  {
+    "path": "server/coordination/candidate_ranking.py",
+    "source": "server/coordination/candidate_ranking.py",
+    "sha256": "ca7b52c611e5a90af7414a2b51bef806744f77f967659e0273999aaa75adfd97"
+  },
+  {
+    "path": "server/coordination/conflict_graph.py",
+    "source": "server/coordination/conflict_graph.py",
+    "sha256": "a955d681732baf3c966a1cd7c70f31219968e04778c3961aa914c01b60fd5f88"
+  },
+  {
+    "path": "server/coordination/legacy_adapter.py",
+    "source": "server/coordination/legacy_adapter.py",
+    "sha256": "5aee217de65fe1e89195cadd825a629bff5678ce347d7ac6e9c9793aced12dc5"
+  },
+  {
+    "path": "server/coordination/models.py",
+    "source": "server/coordination/models.py",
+    "sha256": "da476c49af2adff99947d5aae0d67594c49f1e6ba98bdf90c4737d31b19ec8ad"
+  },
+  {
+    "path": "server/coordination/orchestrator.py",
+    "source": "server/coordination/orchestrator.py",
+    "sha256": "9bc8c8a49c6c2c2e8f52c193c973b1e0c699ca4dd1455c34b25df0a36913b842"
+  },
+  {
+    "path": "server/coordination/proposer.py",
+    "source": "server/coordination/proposer.py",
+    "sha256": "4c2983e14940f38a3ba8830ee68fbcbcdbe7a5ca5917e2104de786d1fc00390e"
+  },
+  {
+    "path": "server/coordination/responses_proposer.py",
+    "source": "server/coordination/responses_proposer.py",
+    "sha256": "0e97146c17133234ff45c34d964a0798be273aa0977ee18ffbae8293e7708179"
+  },
+  {
+    "path": "server/coordination/transaction.py",
+    "source": "server/coordination/transaction.py",
+    "sha256": "e26b978e6f59e90dd6d095c833238383211746e36c4f0d5a9e27379fcc5e5078"
+  },
+  {
+    "path": "server/coordination/validator.py",
+    "source": "server/coordination/validator.py",
+    "sha256": "aa613364e737dbb0e548d19d66271cc116070a7f0f69df5a3ed11ad795a312dd"
+  },
+  {
+    "path": "server/lane_change.py",
+    "source": "server/lane_change.py",
+    "sha256": "f6590a89d0e860e3685998dd18ba0a210f9570d945bd4fbc8469325f533829e0"
+  },
+  {
+    "path": "server/mec.py",
+    "source": "server/mec.py",
+    "sha256": "0491ca58947429627ecf67d53e1673f7d087052d2ae811c81333b2b426d4f964"
+  },
+  {
+    "path": "server/road_geometry.py",
+    "source": "server/road_geometry.py",
+    "sha256": "83d12d0026f4a9e80cb272ef18862fbcd8ce3cb3e0a912cfa99f8b4b032e02ce"
+  },
+  {
+    "path": "server/server.py",
+    "source": "server/server.py",
+    "sha256": "e97983bb6ffabfa819d414517dec6dc2d5bfd366c41ee470b536ec5b5558b7a7"
+  },
+  {
+    "path": "server/tests/test_analyze_carla_conflict_active_confirmatory.py",
+    "source": "server/tests/test_analyze_carla_conflict_active_confirmatory.py",
+    "sha256": "28e502f89ffd664e4ebae40d87a29970fe569333ab055ea159df6c49d651926d"
+  },
+  {
+    "path": "server/tests/test_analyze_carla_paired_coordination.py",
+    "source": "server/tests/test_analyze_carla_paired_coordination.py",
+    "sha256": "4dc0e8b4f0da86abc9f66b802afc054d2b1eb2dd7609884c10fb4a726cd9b558"
+  },
+  {
+    "path": "server/tests/test_candidate_prioritization.py",
+    "source": "server/tests/test_candidate_prioritization.py",
+    "sha256": "e891ca6eba911455dac4624eef8fb94dc40bc0fc714cdb0f6d251ac3ba04fcc4"
+  },
+  {
+    "path": "server/tests/test_candidate_ranking.py",
+    "source": "server/tests/test_candidate_ranking.py",
+    "sha256": "046601194e7b3df57960e61db86166a23d87a82ef2e8252d69aaacbb4b3909a2"
+  },
+  {
+    "path": "server/tests/test_carla_conflict_active_pilot.py",
+    "source": "server/tests/test_carla_conflict_active_pilot.py",
+    "sha256": "7694a80dcf9b1d43bde2cc3f34bcb4445712c427eb4086e70c111842d02c8114"
+  },
+  {
+    "path": "server/tests/test_carla_paired_coordination.py",
+    "source": "server/tests/test_carla_paired_coordination.py",
+    "sha256": "76894350008345efd5993a1c79519ff6d1d16974e523ea865caff72830613ec0"
+  },
+  {
+    "path": "server/tests/test_global_conflict_recovery.py",
+    "source": "server/tests/test_global_conflict_recovery.py",
+    "sha256": "e9d2b0a46da01ed730e9c11bb932fc741c82aa126fddf2613ff09c7374f0a404"
+  },
+  {
+    "path": "server/tests/test_lane_change_speed_supersession.py",
+    "source": "server/tests/test_lane_change_speed_supersession.py",
+    "sha256": "a6353ac31681bbf9054acf07288ace48c249da3202e3b4ba6f43d8d8835fe355"
+  },
+  {
+    "path": "server/tests/test_mindcav_v2.py",
+    "source": "server/tests/test_mindcav_v2.py",
+    "sha256": "c023ed53fb095fcc08b367e2df14bd780ede28889b20666c61171521028ddbaf"
+  },
+  {
+    "path": "server/webrtc.py",
+    "source": "server/webrtc.py",
+    "sha256": "145cea574a6f55e8e315bc57c68b67e1f1bd54edb509403f894223f75b2f103e"
+  },
+  {
+    "path": "server/ws_routes.py",
+    "source": "server/ws_routes.py",
+    "sha256": "2dc73a9e0705e1c24207955b3f022e8caf416e8aa1e29ad2c5565bddd1c52e9d"
+  },
+  {
+    "path": "client/web/vite.config.js",
+    "source": "client/web/vite.config.js",
+    "sha256": "91ea6c2911b6f169df27ae26a96a43465d02ac06ab5da186ef03445185794954"
+  },
+  {
+    "path": "client/web/package-lock.json",
+    "source": "client/web/package-lock.json",
+    "sha256": "035f60338ee947e3c5663d29aaf6fefe1a29b4f43d9eba6efc4b45ec9b576348"
+  },
+  {
+    "path": "client/web/tailwind.config.js",
+    "source": "client/web/tailwind.config.js",
+    "sha256": "13d91d4b7427491eeb00f88a7989bb6498d4ead6ca7339c78bb9e748d8093541"
+  },
+  {
+    "path": "client/web/postcss.config.js",
+    "source": "client/web/postcss.config.js",
+    "sha256": "0daf737a0144521a8ae391c8a6724fb7a6b7d2dd2d45af3c2793f9fff0238091"
+  },
+  {
+    "path": "client/web/package.json",
+    "source": "client/web/package.json",
+    "sha256": "d8efe61453c40627436b4d02ede596a46efce53da575d79e814c45690f9f5fce"
+  },
+  {
+    "path": "client/web/index.html",
+    "source": "client/web/index.html",
+    "sha256": "5c91ec694ddbb27cd171bfe743e43a4ecda50d75478a507f0c4e0db98ca2ee65"
+  },
+  {
+    "path": "client/web/src/index.css",
+    "source": "client/web/src/index.css",
+    "sha256": "8f0b8fc566b72b556d4086ac42fbe4ce2534a1fd9e95c505c323c69d080b3da1"
+  },
+  {
+    "path": "client/web/src/App.jsx",
+    "source": "client/web/src/App.jsx",
+    "sha256": "a8a6c2f06835e5ee739c54a34d51d1c831013483232a0a9de96c74ca9c2aa102"
+  },
+  {
+    "path": "client/web/src/main.jsx",
+    "source": "client/web/src/main.jsx",
+    "sha256": "41335b785ea6eb31559f2856c1996af9d481e474d9ffbb732cc403531417549e"
+  },
+  {
+    "path": "client/web/src/hooks/useFrameCapture.js",
+    "source": "client/web/src/hooks/useFrameCapture.js",
+    "sha256": "dd385629318214f2c96db741362ecaed29bfcc6bfa5d46a3b09209a3a76fab98"
+  },
+  {
+    "path": "client/web/src/hooks/useWebRTC.js",
+    "source": "client/web/src/hooks/useWebRTC.js",
+    "sha256": "40f85a7ab53075af17df94f612f68f024eec2afc4b222e877b5e88c4f5080de5"
+  },
+  {
+    "path": "client/web/src/hooks/useWebSocket.js",
+    "source": "client/web/src/hooks/useWebSocket.js",
+    "sha256": "8e5d9dcdd94ed89d1bd562ba0508ce45515f0ad1df9fbd3467d4b63dd8c9e394"
+  },
+  {
+    "path": "client/web/src/components/VideoRTC.jsx",
+    "source": "client/web/src/components/VideoRTC.jsx",
+    "sha256": "4e4f791e2674da77cf41a4040b65be494d2c90068ae2100b56fe87c376279528"
+  },
+  {
+    "path": "client/web/src/components/GlobalControlPanel.jsx",
+    "source": "client/web/src/components/GlobalControlPanel.jsx",
+    "sha256": "912e9ecd7ea44afb6a8e812bc1a203885be9eb174845304e4e04ca54bbbaf715"
+  },
+  {
+    "path": "client/web/src/components/ControlPanel.jsx",
+    "source": "client/web/src/components/ControlPanel.jsx",
+    "sha256": "1868b2812c50091b149f45c7087bdd64cf11673d8ab8cf9006381c8b28a587d8"
+  },
+  {
+    "path": "client/web/src/components/VideoFeed.jsx",
+    "source": "client/web/src/components/VideoFeed.jsx",
+    "sha256": "5e0025378ba2760296d59e3eab91a2fd26e11cb8657cb9646257b255ec464b4f"
+  },
+  {
+    "path": "client/web/src/components/ConfigDrawer.jsx",
+    "source": "client/web/src/components/ConfigDrawer.jsx",
+    "sha256": "3e2a775808a43ebc97abaf40c8fb86c229ad2535d9cb8e4c1d79137eadd1ae3f"
+  },
+  {
+    "path": "client/web/src/components/MecPanel.jsx",
+    "source": "client/web/src/components/MecPanel.jsx",
+    "sha256": "5b25731d871271cb48ef310427837d63b368701d5c729aa085ee0b92e73dcded"
+  },
+  {
+    "path": "client/web/src/components/WebRTCDashboard.jsx",
+    "source": "client/web/src/components/WebRTCDashboard.jsx",
+    "sha256": "b81437b1b1a2b5738774beb3305767f1b2600634388b417e477148582e49abff"
+  },
+  {
+    "path": "client/web/src/components/TelemetryPanel.jsx",
+    "source": "client/web/src/components/TelemetryPanel.jsx",
+    "sha256": "d1acdc8b9d5d3e3d19527d8817ef28378618cd955de3f5f086722a3bed566754"
+  },
+  {
+    "path": "client/web/src/components/Dashboard.jsx",
+    "source": "client/web/src/components/Dashboard.jsx",
+    "sha256": "d5e8e0f1c80852aa43ae9f52d31dca17d2892852b1f7d6176e47dde399b1d11c"
+  },
+  {
+    "path": "client/web/src/components/ControlPanelWebRTC.jsx",
+    "source": "client/web/src/components/ControlPanelWebRTC.jsx",
+    "sha256": "3cbffbb62c0c5beb956f03341fba3cca9a7c309c200e7d1e0b6ce74aa4f13d26"
+  },
+  {
+    "path": "client/web/src/components/IntentGeneratorPanel.jsx",
+    "source": "client/web/src/components/IntentGeneratorPanel.jsx",
+    "sha256": "513cce69d761908c94a1f570f025befa0c284f72961739a8f7d125101aec4ec8"
+  },
+  {
+    "path": "client/web/src/components/WebRTCVideo.jsx",
+    "source": "client/web/src/components/WebRTCVideo.jsx",
+    "sha256": "36b89c26980ecc11b66c0f7dd0a2b04610586fa1168f6b36d0adb845c5e40b41"
+  },
+  {
+    "path": "client/web/src/components/IntentPanel.jsx",
+    "source": "client/web/src/components/IntentPanel.jsx",
+    "sha256": "c091b7e21e3867a4cf0836b15696f591520c516bfafb6054cbb48ebafa172232"
+  },
+  {
+    "path": "client/web/src/agents/llmAgent.js",
+    "source": "client/web/src/agents/llmAgent.js",
+    "sha256": "d717a048beca8a3375ed5b875d9be0600bd22b99011aed49f6da9a4d4241ac3f"
+  },
+  {
+    "path": "scripts/benchmark_mec_review_stages.py",
+    "source": "AutoLLM/scripts/benchmark_mec_review_stages.py",
+    "sha256": "743606f51057cde47a5dff39c860606aa8743077704d8a7e041b406460a437ef"
+  },
+  {
+    "path": "scripts/plot_scenario_results.py",
+    "source": "AutoLLM/scripts/plot_scenario_results.py",
+    "sha256": "1cc6f1a174efe92d3e4dc94df622537e934ef9174bb992a971c472c6076c5962"
+  },
+  {
+    "path": "scripts/record_scenario_video_matrix.py",
+    "source": "AutoLLM/scripts/record_scenario_video_matrix.py",
+    "sha256": "fac67e0b53b226a447bfa120856d1c7597bfc264b5b464512bdbc1b1129f6b9d"
+  },
+  {
+    "path": "models/candidate_ranker.npz",
+    "source": "data/models/candidate_ranker.npz",
+    "sha256": "74ccd3bdffbd5d11529d753d0e54a3a49cc57edb52108bcc2f33290cfa2a6f00"
+  },
+  {
+    "path": "models/mappo_actor.npz",
+    "source": "data/experiments/carla_aligned_mappo_candidate_20260916/actor.npz",
+    "sha256": "ab2d5d8dfd0c0164f5aeb70996788af2b9a2910f1897ed998776a23ba08ebf06"
+  },
+  {
+    "path": "experiments/historical/carla_v4_schedule.json",
+    "source": "experiments/carla_conflict_active_confirmatory_v4_20260916.json",
+    "sha256": "d0f7d64ab42cb0602719a82b30df140b880593da77fada5310745a01c08bd5ac"
+  },
+  {
+    "path": "scripts/camera_recording.py",
+    "source": "AutoLLM/scripts/record_carla_method_gallery.py (recording utilities extracted)",
+    "sha256": "e7c685aa4642ba2e853ec291761ab9b354881e2591a75af6ccafba52869f0a24"
+  }
+]

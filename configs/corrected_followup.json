@@ -1,0 +1,32 @@
+{
+  "version": "corrected_executor_joint_recovery",
+  "claim_status": "post_hoc_followup",
+  "historical_schedule": "experiments/historical/carla_v4_schedule.json",
+  "methods": [
+    "FCFS_GAP",
+    "MAPPO_ADAPTED",
+    "MIND_CAV_DETERMINISTIC",
+    "MIND_CAV_LEARNED"
+  ],
+  "fleet_sizes": [
+    2,
+    4,
+    8
+  ],
+  "scenario_families": [
+    "close_reciprocal",
+    "contested_merge",
+    "blocked_merge"
+  ],
+  "repetitions": 21,
+  "timeout_sim_s": 60,
+  "failure_penalty_s": 60,
+  "flow_target_kmh": 50,
+  "candidate_ranker": "models/candidate_ranker.npz",
+  "mappo_actor": "models/mappo_actor.npz",
+  "liveness_preparation": true,
+  "global_conflict_recovery": true,
+  "execution_speed_prediction_v5": false,
+  "persist_frames": false,
+  "enable_cameras": false
+}
