@@ -26,5 +26,6 @@ the supplied learned ranker is an optional ablation. Neither requires an OpenAI 
 
 Start with [installation](docs/INSTALLATION.md), then [reproduction](docs/REPRODUCIBILITY.md).
 See [release scope](docs/RELEASE_SCOPE.md) before interpreting historical results.
+Dashboard v2 support is tracked in the [UI migration TODO](docs/UI_TODO.md).
 Raw campaigns, videos, datasets, manuscripts, credentials and build caches are not
 part of this Git branch. No public raw-data download URL is supplied by this release.
